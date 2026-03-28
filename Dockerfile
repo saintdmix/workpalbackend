@@ -2,23 +2,25 @@ FROM dart:stable AS build
 
 WORKDIR /app
 
-# Copy pubspec files and get dependencies
 COPY pubspec.yaml pubspec.lock ./
 RUN dart pub get
 
-# Copy the rest of the source
+# Activate dart_frog_cli
+RUN dart pub global activate dart_frog_cli
+
 COPY . .
 
-# Compile to a native executable
-RUN dart compile exe bin/server.dart -o bin/server
+# Generate production build
+RUN dart pub global run dart_frog_cli:dart_frog build
 
-# Use a minimal runtime image
+# Compile the generated server
+RUN dart compile exe build/bin/server.dart -o server
+
 FROM debian:bookworm-slim
 
 WORKDIR /app
-COPY --from=build /app/bin/server ./server
+COPY --from=build /app/server ./server
 
-# Railway injects PORT env var
 EXPOSE 8080
 
 CMD ["./server"]
