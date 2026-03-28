@@ -1,0 +1,11 @@
+[phases.setup]
+nixPkgs = ["dart_3_7"]
+
+[phases.install]
+cmds = ["dart pub get"]
+
+[phases.build]
+cmds = ["dart compile exe bin/server.dart -o server"]
+
+[start]
+cmd = "./server"
