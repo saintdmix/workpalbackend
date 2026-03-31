@@ -34,30 +34,62 @@ class ProfileService {
       throw ApiException.unauthorized('Invalid or expired user token.');
     }
 
-    var profile = await _firestoreClient.getDocument(
+    final roleProfile = await _firestoreClient.getDocument(
       collectionPath: collection,
       documentId: uid,
       idToken: idToken,
     );
 
-    if (profile == null) {
-      final now = DateTime.now().toUtc().toIso8601String();
-      profile = <String, dynamic>{
-        'uid': uid,
-        'email': email,
-        'role': normalizedRole,
-        'createdAt': now,
-        'updatedAt': now,
-      };
+    // Also pull the consolidated user document to avoid returning an incomplete profile.
+    final legacyProfile = await _firestoreClient.getDocument(
+      collectionPath: 'users',
+      documentId: uid,
+      idToken: idToken,
+    );
+
+    final now = DateTime.now().toUtc().toIso8601String();
+    final merged = <String, dynamic>{
+      if (legacyProfile != null) ...legacyProfile,
+      if (roleProfile != null) ...roleProfile,
+      'uid': uid,
+      'email': email,
+      'role': normalizedRole,
+      'createdAt': (roleProfile ?? legacyProfile)?['createdAt'] ?? now,
+      'updatedAt': now,
+    };
+
+    // Persist the merged profile so subsequent reads stay consistent.
+    await _firestoreClient.setDocument(
+      collectionPath: collection,
+      documentId: uid,
+      idToken: idToken,
+      data: merged,
+    );
+    await _firestoreClient.setDocument(
+      collectionPath: 'users',
+      documentId: uid,
+      idToken: idToken,
+      data: merged,
+    );
+
+    await _firestoreClient.setDocument(
+      collectionPath: 'userId',
+      documentId: uid,
+      idToken: idToken,
+      data: merged,
+    );
+
+    final referralId = merged['referralId']?.toString();
+    if (referralId != null && referralId.isNotEmpty) {
       await _firestoreClient.setDocument(
-        collectionPath: collection,
-        documentId: uid,
+        collectionPath: 'referralId',
+        documentId: referralId,
         idToken: idToken,
-        data: profile,
+        data: <String, dynamic>{...merged, 'referralId': referralId},
       );
     }
 
-    return profile;
+    return merged;
   }
 
   Future<Map<String, dynamic>> updateProfile({
@@ -86,6 +118,30 @@ class ProfileService {
       idToken: idToken,
       data: merged,
     );
+
+    await _firestoreClient.setDocument(
+      collectionPath: 'users',
+      documentId: '${current['uid']}',
+      idToken: idToken,
+      data: merged,
+    );
+
+    await _firestoreClient.setDocument(
+      collectionPath: 'userId',
+      documentId: '${current['uid']}',
+      idToken: idToken,
+      data: merged,
+    );
+
+    final referralId = merged['referralId']?.toString();
+    if (referralId != null && referralId.isNotEmpty) {
+      await _firestoreClient.setDocument(
+        collectionPath: 'referralId',
+        documentId: referralId,
+        idToken: idToken,
+        data: <String, dynamic>{...merged, 'referralId': referralId},
+      );
+    }
 
     return merged;
   }

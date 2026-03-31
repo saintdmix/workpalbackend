@@ -155,32 +155,32 @@ class AuthService {
       throw ApiException.internal('Missing auth token from Firebase.');
     }
 
-    var profile = await _firestoreClient.getDocument(
+    // Fetch the role-specific profile.
+    final roleProfile = await _firestoreClient.getDocument(
       collectionPath: collection,
       documentId: uid,
       idToken: idToken,
     );
 
-    if (profile == null) {
-      final now = DateTime.now().toUtc().toIso8601String();
-      profile = <String, dynamic>{
-        'uid': uid,
-        'userId': uid,
-        'users': uid,
-        'email': email,
-        'role': role,
-        'createdAt': now,
-        'updatedAt': now,
-      };
-      await _firestoreClient.setDocument(
-        collectionPath: collection,
-        documentId: uid,
-        idToken: idToken,
-        data: profile,
-      );
-    }
+    // Fetch the legacy consolidated profile if it exists so we don't lose data.
+    final legacyProfile = await _firestoreClient.getDocument(
+      collectionPath: 'users',
+      documentId: uid,
+      idToken: idToken,
+    );
 
     final now = DateTime.now().toUtc().toIso8601String();
+
+    // Merge role profile and legacy data (favor non-empty values from either).
+    final profile = _mergeProfiles(
+      primary: roleProfile,
+      secondary: legacyProfile,
+      uid: uid,
+      email: email,
+      role: role,
+      now: now,
+    );
+
     final referralId =
         _optionalString(profile, 'referralId') ?? _generateReferralCode();
     final legacy = <String, dynamic>{
@@ -213,6 +213,14 @@ class AuthService {
       data: <String, dynamic>{...legacy, 'referralId': referralId},
     );
 
+    // Keep the role-specific collection in sync with the merged profile.
+    await _firestoreClient.setDocument(
+      collectionPath: collection,
+      documentId: uid,
+      idToken: idToken,
+      data: profile,
+    );
+
     return <String, dynamic>{
       'message': '${_capitalize(role)} sign in successful.',
       'uid': uid,
@@ -221,6 +229,35 @@ class AuthService {
       'refreshToken': authData['refreshToken'],
       'profile': profile,
     };
+  }
+
+  Map<String, dynamic> _mergeProfiles({
+    required Map<String, dynamic>? primary,
+    required Map<String, dynamic>? secondary,
+    required String uid,
+    required String email,
+    required String role,
+    required String now,
+  }) {
+    final merged = <String, dynamic>{
+      if (secondary != null) ...secondary,
+      if (primary != null) ...primary,
+    };
+
+    // Ensure required identifiers are present.
+    merged['uid'] = uid;
+    merged['userId'] = merged['userId'] ?? uid;
+    merged['users'] = merged['users'] ?? uid;
+    merged['email'] = merged['email'] ?? email;
+    merged['role'] = merged['role'] ?? role;
+
+    // Preserve original creation time if available, otherwise set to now.
+    merged['createdAt'] = _optionalString(merged, 'createdAt') ?? now;
+
+    // Always refresh updatedAt to current time.
+    merged['updatedAt'] = now;
+
+    return merged;
   }
 
   String _requiredString(Map<String, dynamic> json, String key) {
