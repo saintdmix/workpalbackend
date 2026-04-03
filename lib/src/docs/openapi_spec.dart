@@ -10,7 +10,8 @@ Map<String, dynamic> buildOpenApiSpec({
     'info': <String, dynamic>{
       'title': 'Workpal Backend API',
       'version': '1.0.0',
-      'description': 'HTTP APIs for auth, profile, stories, notifications, and workfeeds.',
+      'description':
+          'HTTP APIs for auth, profile, stories, notifications, and workfeeds.',
     },
     'servers': <Map<String, dynamic>>[
       <String, dynamic>{'url': origin},
@@ -47,7 +48,9 @@ Map<String, dynamic> buildOpenApiSpec({
               'address': _stringSchema(description: 'Address'),
               'lat': <String, dynamic>{'type': 'number'},
               'lng': <String, dynamic>{'type': 'number'},
-              'referralCode': _stringSchema(description: 'Optional referral code'),
+              'referralCode': _stringSchema(
+                description: 'Optional referral code',
+              ),
             },
             required: const <String>['email', 'password', 'username'],
           ),
@@ -102,12 +105,16 @@ Map<String, dynamic> buildOpenApiSpec({
               'lng': <String, dynamic>{'type': 'number'},
               'bio': _stringSchema(description: 'Bio'),
               'title': _stringSchema(description: 'Professional title'),
-              'profileImageUrl': _stringSchema(description: 'Profile image URL'),
+              'profileImageUrl': _stringSchema(
+                description: 'Profile image URL',
+              ),
               'skills': <String, dynamic>{
                 'type': 'array',
                 'items': <String, dynamic>{'type': 'string'},
               },
-              'referralCode': _stringSchema(description: 'Optional referral code'),
+              'referralCode': _stringSchema(
+                description: 'Optional referral code',
+              ),
             },
             required: const <String>['name', 'email', 'password'],
           ),
@@ -171,29 +178,63 @@ Map<String, dynamic> buildOpenApiSpec({
               required: true,
             ),
           ],
-          requestBodyDescription: 'Profile fields to update.',
-          requestBodySchema: _objectSchema(
-            properties: <String, dynamic>{
-              'username': _stringSchema(),
-              'name': _stringSchema(),
-              'phone': _stringSchema(),
-              'phoneNumber': _stringSchema(),
-              'address': _stringSchema(),
-              'locationAddress': _stringSchema(),
-              'bio': _stringSchema(),
-              'title': _stringSchema(),
-              'profileImage': _stringSchema(),
-              'imageUrl': _stringSchema(),
-              'lat': <String, dynamic>{'type': 'number'},
-              'lng': <String, dynamic>{'type': 'number'},
+          requestBodyDescription:
+              'Profile fields to update (JSON or multipart/form-data).',
+          requestBodyContent: <String, dynamic>{
+            'application/json': <String, dynamic>{
+              'schema': _objectSchema(
+                properties: <String, dynamic>{
+                  'username': _stringSchema(),
+                  'name': _stringSchema(),
+                  'phone': _stringSchema(),
+                  'phoneNumber': _stringSchema(),
+                  'address': _stringSchema(),
+                  'locationAddress': _stringSchema(),
+                  'bio': _stringSchema(),
+                  'title': _stringSchema(),
+                  'profileImage': _stringSchema(),
+                  'imageUrl': _stringSchema(),
+                  'coverImage': _stringSchema(),
+                  'lat': <String, dynamic>{'type': 'number'},
+                  'lng': <String, dynamic>{'type': 'number'},
+                },
+                additionalProperties: true,
+              ),
+              'example': <String, dynamic>{
+                'username': 'Updated Name',
+                'phoneNumber': '+2348000000002',
+                'address': 'Lekki, Lagos',
+                'bio': 'Available on weekdays',
+              },
             },
-            additionalProperties: true,
-          ),
-          requestBodyExample: <String, dynamic>{
-            'username': 'Updated Name',
-            'phoneNumber': '+2348000000002',
-            'address': 'Lekki, Lagos',
-            'bio': 'Available on weekdays',
+            'multipart/form-data': <String, dynamic>{
+              'schema': <String, dynamic>{
+                'type': 'object',
+                'properties': <String, dynamic>{
+                  'username': _stringSchema(),
+                  'name': _stringSchema(),
+                  'phone': _stringSchema(),
+                  'phoneNumber': _stringSchema(),
+                  'address': _stringSchema(),
+                  'locationAddress': _stringSchema(),
+                  'bio': _stringSchema(),
+                  'title': _stringSchema(),
+                  'lat': <String, dynamic>{'type': 'number'},
+                  'lng': <String, dynamic>{'type': 'number'},
+                  'profileImage': <String, dynamic>{
+                    'type': 'string',
+                    'format': 'binary',
+                    'description': 'Profile image file.',
+                  },
+                  'coverImage': <String, dynamic>{
+                    'type': 'string',
+                    'format': 'binary',
+                    'description': 'Cover image file.',
+                  },
+                },
+                'additionalProperties': true,
+              },
+            },
           },
         ),
       },
@@ -202,9 +243,15 @@ Map<String, dynamic> buildOpenApiSpec({
           summary: 'List stories',
           tag: 'Stories',
           parameters: <Map<String, dynamic>>[
-            _queryParam(name: 'artisanId', description: 'Filter by artisan id.'),
+            _queryParam(
+              name: 'artisanId',
+              description: 'Filter by artisan id.',
+            ),
             _queryParam(name: 'limit', description: 'Max number of stories.'),
-            _queryParam(name: 'withinHours', description: 'Only stories within N hours.'),
+            _queryParam(
+              name: 'withinHours',
+              description: 'Only stories within N hours.',
+            ),
           ],
         ),
         'post': _operation(
@@ -248,7 +295,10 @@ Map<String, dynamic> buildOpenApiSpec({
           tag: 'Stories',
           parameters: <Map<String, dynamic>>[
             _queryParam(name: 'limit', description: 'Max number of vendors.'),
-            _queryParam(name: 'withinHours', description: 'Only active stories within N hours.'),
+            _queryParam(
+              name: 'withinHours',
+              description: 'Only active stories within N hours.',
+            ),
           ],
         ),
       },
@@ -257,7 +307,10 @@ Map<String, dynamic> buildOpenApiSpec({
           summary: 'Get viewed story IDs',
           tag: 'Stories',
           parameters: <Map<String, dynamic>>[
-            _queryParam(name: 'storyIds', description: 'Comma-separated story IDs.'),
+            _queryParam(
+              name: 'storyIds',
+              description: 'Comma-separated story IDs.',
+            ),
           ],
         ),
         'post': _operation(
@@ -283,8 +336,14 @@ Map<String, dynamic> buildOpenApiSpec({
               description: 'User role (`customer` or `artisan`).',
               required: true,
             ),
-            _queryParam(name: 'limit', description: 'Max number of notifications.'),
-            _queryParam(name: 'unreadOnly', description: 'Use true for unread only.'),
+            _queryParam(
+              name: 'limit',
+              description: 'Max number of notifications.',
+            ),
+            _queryParam(
+              name: 'unreadOnly',
+              description: 'Use true for unread only.',
+            ),
           ],
         ),
         'post': _operation(
@@ -366,7 +425,10 @@ Map<String, dynamic> buildOpenApiSpec({
           tag: 'Workfeeds',
           parameters: <Map<String, dynamic>>[
             _queryParam(name: 'limit', description: 'Max number of posts.'),
-            _queryParam(name: 'artisanId', description: 'Filter by artisan id.'),
+            _queryParam(
+              name: 'artisanId',
+              description: 'Filter by artisan id.',
+            ),
           ],
         ),
         'post': _operation(
@@ -521,10 +583,22 @@ Map<String, dynamic> buildOpenApiSpec({
           summary: 'List chat rooms (chat list)',
           tag: 'Chats',
           parameters: <Map<String, dynamic>>[
-            _queryParam(name: 'role', description: 'Role hint: customer|vendor|artisan.'),
-            _queryParam(name: 'limit', description: 'Max number of chat rooms.'),
-            _queryParam(name: 'pageToken', description: 'Pagination cursor token.'),
-            _queryParam(name: 'search', description: 'Search by peer display name.'),
+            _queryParam(
+              name: 'role',
+              description: 'Role hint: customer|vendor|artisan.',
+            ),
+            _queryParam(
+              name: 'limit',
+              description: 'Max number of chat rooms.',
+            ),
+            _queryParam(
+              name: 'pageToken',
+              description: 'Pagination cursor token.',
+            ),
+            _queryParam(
+              name: 'search',
+              description: 'Search by peer display name.',
+            ),
           ],
         ),
       },
@@ -533,14 +607,20 @@ Map<String, dynamic> buildOpenApiSpec({
           summary: 'Get pinned chats',
           tag: 'Chats',
           parameters: <Map<String, dynamic>>[
-            _queryParam(name: 'role', description: 'Role hint: customer|vendor|artisan.'),
+            _queryParam(
+              name: 'role',
+              description: 'Role hint: customer|vendor|artisan.',
+            ),
           ],
         ),
         'post': _operation(
           summary: 'Pin or unpin a chat room',
           tag: 'Chats',
           parameters: <Map<String, dynamic>>[
-            _queryParam(name: 'role', description: 'Role hint: customer|vendor|artisan.'),
+            _queryParam(
+              name: 'role',
+              description: 'Role hint: customer|vendor|artisan.',
+            ),
           ],
           requestBodyDescription: 'Pin toggle payload.',
           requestBodySchema: _objectSchema(
@@ -562,7 +642,10 @@ Map<String, dynamic> buildOpenApiSpec({
           summary: 'Get unread message summary',
           tag: 'Chats',
           parameters: <Map<String, dynamic>>[
-            _queryParam(name: 'role', description: 'Role hint: customer|vendor|artisan.'),
+            _queryParam(
+              name: 'role',
+              description: 'Role hint: customer|vendor|artisan.',
+            ),
           ],
         ),
       },
@@ -571,17 +654,32 @@ Map<String, dynamic> buildOpenApiSpec({
           summary: 'List chat rooms',
           tag: 'Chats',
           parameters: <Map<String, dynamic>>[
-            _queryParam(name: 'role', description: 'Role hint: customer|vendor|artisan.'),
-            _queryParam(name: 'limit', description: 'Max number of chat rooms.'),
-            _queryParam(name: 'pageToken', description: 'Pagination cursor token.'),
-            _queryParam(name: 'search', description: 'Search by peer display name.'),
+            _queryParam(
+              name: 'role',
+              description: 'Role hint: customer|vendor|artisan.',
+            ),
+            _queryParam(
+              name: 'limit',
+              description: 'Max number of chat rooms.',
+            ),
+            _queryParam(
+              name: 'pageToken',
+              description: 'Pagination cursor token.',
+            ),
+            _queryParam(
+              name: 'search',
+              description: 'Search by peer display name.',
+            ),
           ],
         ),
         'post': _operation(
           summary: 'Create or update chat room',
           tag: 'Chats',
           parameters: <Map<String, dynamic>>[
-            _queryParam(name: 'role', description: 'Role hint: customer|vendor|artisan.'),
+            _queryParam(
+              name: 'role',
+              description: 'Role hint: customer|vendor|artisan.',
+            ),
           ],
           requestBodyDescription: 'Chat room payload.',
           requestBodySchema: _objectSchema(
@@ -603,7 +701,10 @@ Map<String, dynamic> buildOpenApiSpec({
           summary: 'Forward message to one or more chat rooms',
           tag: 'Chats',
           parameters: <Map<String, dynamic>>[
-            _queryParam(name: 'role', description: 'Role hint: customer|vendor|artisan.'),
+            _queryParam(
+              name: 'role',
+              description: 'Role hint: customer|vendor|artisan.',
+            ),
           ],
           requestBodyDescription: 'Forward payload.',
           requestBodySchema: _objectSchema(
@@ -634,7 +735,10 @@ Map<String, dynamic> buildOpenApiSpec({
           summary: 'Set current user presence',
           tag: 'Chats',
           parameters: <Map<String, dynamic>>[
-            _queryParam(name: 'role', description: 'Role hint: customer|vendor|artisan.'),
+            _queryParam(
+              name: 'role',
+              description: 'Role hint: customer|vendor|artisan.',
+            ),
           ],
           requestBodyDescription: 'Presence payload.',
           requestBodySchema: _objectSchema(
@@ -652,7 +756,10 @@ Map<String, dynamic> buildOpenApiSpec({
           tag: 'Chats',
           parameters: <Map<String, dynamic>>[
             _pathParam(name: 'user_id'),
-            _queryParam(name: 'role', description: 'Role hint: customer|vendor|artisan.'),
+            _queryParam(
+              name: 'role',
+              description: 'Role hint: customer|vendor|artisan.',
+            ),
           ],
         ),
         'post': _operation(
@@ -660,7 +767,10 @@ Map<String, dynamic> buildOpenApiSpec({
           tag: 'Chats',
           parameters: <Map<String, dynamic>>[
             _pathParam(name: 'user_id'),
-            _queryParam(name: 'role', description: 'Role hint: customer|vendor|artisan.'),
+            _queryParam(
+              name: 'role',
+              description: 'Role hint: customer|vendor|artisan.',
+            ),
           ],
         ),
         'delete': _operation(
@@ -668,7 +778,10 @@ Map<String, dynamic> buildOpenApiSpec({
           tag: 'Chats',
           parameters: <Map<String, dynamic>>[
             _pathParam(name: 'user_id'),
-            _queryParam(name: 'role', description: 'Role hint: customer|vendor|artisan.'),
+            _queryParam(
+              name: 'role',
+              description: 'Role hint: customer|vendor|artisan.',
+            ),
           ],
         ),
       },
@@ -687,14 +800,19 @@ Map<String, dynamic> buildOpenApiSpec({
           tag: 'Chats',
           parameters: <Map<String, dynamic>>[
             _pathParam(name: 'user_id'),
-            _queryParam(name: 'role', description: 'Role hint: customer|vendor|artisan.'),
+            _queryParam(
+              name: 'role',
+              description: 'Role hint: customer|vendor|artisan.',
+            ),
           ],
           requestBodyDescription: 'User report payload.',
           requestBodySchema: _objectSchema(
             properties: <String, dynamic>{
               'reason': _stringSchema(),
               'name': _stringSchema(description: 'Optional reported user name'),
-              'reporterName': _stringSchema(description: 'Optional reporter display name'),
+              'reporterName': _stringSchema(
+                description: 'Optional reporter display name',
+              ),
               'additionalDetails': _stringSchema(),
             },
             required: const <String>['reason'],
@@ -714,7 +832,10 @@ Map<String, dynamic> buildOpenApiSpec({
           tag: 'Chats',
           parameters: <Map<String, dynamic>>[
             _pathParam(name: 'chat_room_id'),
-            _queryParam(name: 'role', description: 'Role hint: customer|vendor|artisan.'),
+            _queryParam(
+              name: 'role',
+              description: 'Role hint: customer|vendor|artisan.',
+            ),
           ],
         ),
         'delete': _operation(
@@ -722,7 +843,10 @@ Map<String, dynamic> buildOpenApiSpec({
           tag: 'Chats',
           parameters: <Map<String, dynamic>>[
             _pathParam(name: 'chat_room_id'),
-            _queryParam(name: 'role', description: 'Role hint: customer|vendor|artisan.'),
+            _queryParam(
+              name: 'role',
+              description: 'Role hint: customer|vendor|artisan.',
+            ),
           ],
         ),
       },
@@ -732,7 +856,10 @@ Map<String, dynamic> buildOpenApiSpec({
           tag: 'Chats',
           parameters: <Map<String, dynamic>>[
             _pathParam(name: 'chat_room_id'),
-            _queryParam(name: 'role', description: 'Role hint: customer|vendor|artisan.'),
+            _queryParam(
+              name: 'role',
+              description: 'Role hint: customer|vendor|artisan.',
+            ),
           ],
           requestBodyDescription: 'Read acknowledgement payload.',
           requestBodySchema: _objectSchema(
@@ -750,12 +877,17 @@ Map<String, dynamic> buildOpenApiSpec({
           tag: 'Chats',
           parameters: <Map<String, dynamic>>[
             _pathParam(name: 'chat_room_id'),
-            _queryParam(name: 'role', description: 'Role hint: customer|vendor|artisan.'),
+            _queryParam(
+              name: 'role',
+              description: 'Role hint: customer|vendor|artisan.',
+            ),
           ],
           requestBodyDescription: 'Status vote payload.',
           requestBodySchema: _objectSchema(
             properties: <String, dynamic>{
-              'status': _stringSchema(description: 'Example: accepted, ongoing, completed'),
+              'status': _stringSchema(
+                description: 'Example: accepted, ongoing, completed',
+              ),
             },
             required: const <String>['status'],
           ),
@@ -768,9 +900,15 @@ Map<String, dynamic> buildOpenApiSpec({
           tag: 'Chats',
           parameters: <Map<String, dynamic>>[
             _pathParam(name: 'chat_room_id'),
-            _queryParam(name: 'role', description: 'Role hint: customer|vendor|artisan.'),
+            _queryParam(
+              name: 'role',
+              description: 'Role hint: customer|vendor|artisan.',
+            ),
             _queryParam(name: 'limit', description: 'Max number of messages.'),
-            _queryParam(name: 'pageToken', description: 'Pagination cursor token.'),
+            _queryParam(
+              name: 'pageToken',
+              description: 'Pagination cursor token.',
+            ),
           ],
         ),
         'post': _operation(
@@ -778,7 +916,10 @@ Map<String, dynamic> buildOpenApiSpec({
           tag: 'Chats',
           parameters: <Map<String, dynamic>>[
             _pathParam(name: 'chat_room_id'),
-            _queryParam(name: 'role', description: 'Role hint: customer|vendor|artisan.'),
+            _queryParam(
+              name: 'role',
+              description: 'Role hint: customer|vendor|artisan.',
+            ),
           ],
           requestBodyDescription: 'Message payload.',
           requestBodySchema: _objectSchema(
@@ -820,7 +961,10 @@ Map<String, dynamic> buildOpenApiSpec({
           parameters: <Map<String, dynamic>>[
             _pathParam(name: 'chat_room_id'),
             _pathParam(name: 'message_id'),
-            _queryParam(name: 'role', description: 'Role hint: customer|vendor|artisan.'),
+            _queryParam(
+              name: 'role',
+              description: 'Role hint: customer|vendor|artisan.',
+            ),
           ],
         ),
         'patch': _operation(
@@ -829,7 +973,10 @@ Map<String, dynamic> buildOpenApiSpec({
           parameters: <Map<String, dynamic>>[
             _pathParam(name: 'chat_room_id'),
             _pathParam(name: 'message_id'),
-            _queryParam(name: 'role', description: 'Role hint: customer|vendor|artisan.'),
+            _queryParam(
+              name: 'role',
+              description: 'Role hint: customer|vendor|artisan.',
+            ),
           ],
           requestBodyDescription: 'Message action payload.',
           requestBodySchema: _objectSchema(
@@ -839,7 +986,9 @@ Map<String, dynamic> buildOpenApiSpec({
                     'add_reaction | mark_audio_played | delete_for_me | delete_for_everyone | update_quote_status',
               ),
               'emoji': _stringSchema(),
-              'status': _stringSchema(description: 'Used when action=update_quote_status'),
+              'status': _stringSchema(
+                description: 'Used when action=update_quote_status',
+              ),
             },
             required: const <String>['action'],
             additionalProperties: true,
@@ -856,15 +1005,36 @@ Map<String, dynamic> buildOpenApiSpec({
           tag: 'Vendors',
           parameters: <Map<String, dynamic>>[
             _queryParam(name: 'limit', description: 'Max number of vendors.'),
-            _queryParam(name: 'pageToken', description: 'Pagination cursor token.'),
-            _queryParam(name: 'location', description: 'Location text or "lat,lng".'),
-            _queryParam(name: 'latitude', description: 'Latitude for geo search.'),
-            _queryParam(name: 'longitude', description: 'Longitude for geo search.'),
+            _queryParam(
+              name: 'pageToken',
+              description: 'Pagination cursor token.',
+            ),
+            _queryParam(
+              name: 'location',
+              description: 'Location text or "lat,lng".',
+            ),
+            _queryParam(
+              name: 'latitude',
+              description: 'Latitude for geo search.',
+            ),
+            _queryParam(
+              name: 'longitude',
+              description: 'Longitude for geo search.',
+            ),
             _queryParam(name: 'radiusKm', description: 'Radius in kilometers.'),
-            _queryParam(name: 'skills', description: 'Comma-separated skills filter.'),
-            _queryParam(name: 'searchBySkills', description: 'Alias for skills filter.'),
+            _queryParam(
+              name: 'skills',
+              description: 'Comma-separated skills filter.',
+            ),
+            _queryParam(
+              name: 'searchBySkills',
+              description: 'Alias for skills filter.',
+            ),
             _queryParam(name: 'name', description: 'Vendor name/title search.'),
-            _queryParam(name: 'premium', description: 'Premium filter (true/false).'),
+            _queryParam(
+              name: 'premium',
+              description: 'Premium filter (true/false).',
+            ),
           ],
         ),
       },
@@ -874,8 +1044,14 @@ Map<String, dynamic> buildOpenApiSpec({
           tag: 'Vendors',
           parameters: <Map<String, dynamic>>[
             _pathParam(name: 'vendor_id'),
-            _queryParam(name: 'limit', description: 'Max number of portfolio media items.'),
-            _queryParam(name: 'pageToken', description: 'Pagination cursor token.'),
+            _queryParam(
+              name: 'limit',
+              description: 'Max number of portfolio media items.',
+            ),
+            _queryParam(
+              name: 'pageToken',
+              description: 'Pagination cursor token.',
+            ),
           ],
         ),
       },
@@ -886,7 +1062,10 @@ Map<String, dynamic> buildOpenApiSpec({
           parameters: <Map<String, dynamic>>[
             _pathParam(name: 'vendor_id'),
             _queryParam(name: 'limit', description: 'Max number of reviews.'),
-            _queryParam(name: 'pageToken', description: 'Pagination cursor token.'),
+            _queryParam(
+              name: 'pageToken',
+              description: 'Pagination cursor token.',
+            ),
           ],
         ),
       },
@@ -896,8 +1075,14 @@ Map<String, dynamic> buildOpenApiSpec({
           tag: 'Vendors',
           parameters: <Map<String, dynamic>>[
             _pathParam(name: 'vendor_id'),
-            _queryParam(name: 'limit', description: 'Max number of workfeed posts.'),
-            _queryParam(name: 'pageToken', description: 'Pagination cursor token.'),
+            _queryParam(
+              name: 'limit',
+              description: 'Max number of workfeed posts.',
+            ),
+            _queryParam(
+              name: 'pageToken',
+              description: 'Pagination cursor token.',
+            ),
           ],
         ),
       },
@@ -907,7 +1092,10 @@ Map<String, dynamic> buildOpenApiSpec({
           tag: 'Commerce',
           parameters: <Map<String, dynamic>>[
             _queryParam(name: 'limit', description: 'Max number of products.'),
-            _queryParam(name: 'pageToken', description: 'Pagination cursor token.'),
+            _queryParam(
+              name: 'pageToken',
+              description: 'Pagination cursor token.',
+            ),
             _queryParam(name: 'shopId', description: 'Filter by shop id.'),
             _queryParam(name: 'ownerId', description: 'Filter by owner id.'),
             _queryParam(name: 'category', description: 'Filter by category.'),
@@ -1081,8 +1269,14 @@ Map<String, dynamic> buildOpenApiSpec({
           summary: 'List news',
           tag: 'Legacy',
           parameters: <Map<String, dynamic>>[
-            _queryParam(name: 'limit', description: 'Max number of news items.'),
-            _queryParam(name: 'pageToken', description: 'Pagination cursor token.'),
+            _queryParam(
+              name: 'limit',
+              description: 'Max number of news items.',
+            ),
+            _queryParam(
+              name: 'pageToken',
+              description: 'Pagination cursor token.',
+            ),
             _queryParam(name: 'screen', description: 'Optional screen filter.'),
           ],
         ),
@@ -1144,25 +1338,57 @@ Map<String, dynamic> buildOpenApiSpec({
           summary: 'List app messages',
           tag: 'Legacy',
           parameters: <Map<String, dynamic>>[
-            _queryParam(name: 'limit', description: 'Max number of app messages.'),
-            _queryParam(name: 'pageToken', description: 'Pagination cursor token.'),
+            _queryParam(
+              name: 'limit',
+              description: 'Max number of app messages.',
+            ),
+            _queryParam(
+              name: 'pageToken',
+              description: 'Pagination cursor token.',
+            ),
           ],
         ),
         'post': _operation(
           summary: 'Create app message',
           tag: 'Legacy',
-          requestBodyDescription: 'App message payload.',
-          requestBodySchema: _objectSchema(
-            properties: <String, dynamic>{
-              'title': _stringSchema(),
-              'body': _stringSchema(),
-              'type': _stringSchema(),
+          requestBodyDescription:
+              'App message payload (JSON or multipart/form-data).',
+          requestBodyContent: <String, dynamic>{
+            'application/json': <String, dynamic>{
+              'schema': _objectSchema(
+                properties: <String, dynamic>{
+                  'title': _stringSchema(),
+                  'body': _stringSchema(),
+                  'messageText': _stringSchema(),
+                  'type': _stringSchema(),
+                  'imageUrl': _stringSchema(),
+                },
+                additionalProperties: true,
+              ),
+              'example': <String, dynamic>{
+                'title': 'Maintenance Notice',
+                'messageText': 'Select Location',
+                'body': 'The app will be down for maintenance at midnight.',
+              },
             },
-            additionalProperties: true,
-          ),
-          requestBodyExample: <String, dynamic>{
-            'title': 'Maintenance Notice',
-            'body': 'The app will be down for maintenance at midnight.',
+            'multipart/form-data': <String, dynamic>{
+              'schema': <String, dynamic>{
+                'type': 'object',
+                'properties': <String, dynamic>{
+                  'title': _stringSchema(),
+                  'body': _stringSchema(),
+                  'messageText': _stringSchema(),
+                  'type': _stringSchema(),
+                  'image': <String, dynamic>{
+                    'type': 'string',
+                    'format': 'binary',
+                    'description':
+                        'Image file to upload; server returns imageUrl.',
+                  },
+                },
+                'additionalProperties': true,
+              },
+            },
           },
           successCode: 201,
           successDescription: 'App message created.',
@@ -1182,16 +1408,43 @@ Map<String, dynamic> buildOpenApiSpec({
           parameters: <Map<String, dynamic>>[
             _pathParam(name: 'message_id'),
           ],
-          requestBodyDescription: 'App message update payload.',
-          requestBodySchema: _objectSchema(
-            properties: <String, dynamic>{
-              'title': _stringSchema(),
-              'body': _stringSchema(),
-              'type': _stringSchema(),
+          requestBodyDescription:
+              'App message update payload (JSON or multipart/form-data).',
+          requestBodyContent: <String, dynamic>{
+            'application/json': <String, dynamic>{
+              'schema': _objectSchema(
+                properties: <String, dynamic>{
+                  'title': _stringSchema(),
+                  'body': _stringSchema(),
+                  'messageText': _stringSchema(),
+                  'type': _stringSchema(),
+                  'imageUrl': _stringSchema(),
+                },
+                additionalProperties: true,
+              ),
+              'example': <String, dynamic>{
+                'messageText': 'Updated copy',
+              },
             },
-            additionalProperties: true,
-          ),
-          requestBodyExample: <String, dynamic>{'body': 'Updated message body'},
+            'multipart/form-data': <String, dynamic>{
+              'schema': <String, dynamic>{
+                'type': 'object',
+                'properties': <String, dynamic>{
+                  'title': _stringSchema(),
+                  'body': _stringSchema(),
+                  'messageText': _stringSchema(),
+                  'type': _stringSchema(),
+                  'image': <String, dynamic>{
+                    'type': 'string',
+                    'format': 'binary',
+                    'description':
+                        'Image file to upload; server returns imageUrl.',
+                  },
+                },
+                'additionalProperties': true,
+              },
+            },
+          },
         ),
         'delete': _operation(
           summary: 'Delete app message',
@@ -1365,7 +1618,10 @@ Map<String, dynamic> buildOpenApiSpec({
               'amount': <String, dynamic>{'type': 'number'},
               'items': <String, dynamic>{
                 'type': 'array',
-                'items': <String, dynamic>{'type': 'object', 'additionalProperties': true},
+                'items': <String, dynamic>{
+                  'type': 'object',
+                  'additionalProperties': true,
+                },
               },
             },
             additionalProperties: true,
@@ -1436,7 +1692,10 @@ Map<String, dynamic> buildOpenApiSpec({
           tag: 'Legacy',
           parameters: <Map<String, dynamic>>[
             _queryParam(name: 'limit', description: 'Max number of promos.'),
-            _queryParam(name: 'pageToken', description: 'Pagination cursor token.'),
+            _queryParam(
+              name: 'pageToken',
+              description: 'Pagination cursor token.',
+            ),
           ],
         ),
         'post': _operation(
@@ -1499,7 +1758,10 @@ Map<String, dynamic> buildOpenApiSpec({
           tag: 'Legacy',
           parameters: <Map<String, dynamic>>[
             _queryParam(name: 'limit', description: 'Max number of promos.'),
-            _queryParam(name: 'pageToken', description: 'Pagination cursor token.'),
+            _queryParam(
+              name: 'pageToken',
+              description: 'Pagination cursor token.',
+            ),
           ],
         ),
         'post': _operation(
@@ -1567,6 +1829,7 @@ Map<String, dynamic> _operation({
   String? requestBodyDescription,
   Map<String, dynamic>? requestBodySchema,
   Map<String, dynamic>? requestBodyExample,
+  Map<String, dynamic>? requestBodyContent,
   int successCode = 200,
   String successDescription = 'Success',
   bool requiresAuth = true,
@@ -1598,16 +1861,19 @@ Map<String, dynamic> _operation({
         <String, dynamic>{'bearerAuth': <String>[]},
       ],
     if (parameters != null && parameters.isNotEmpty) 'parameters': parameters,
-    if (requestBodyDescription != null && requestBodySchema != null)
+    if (requestBodyDescription != null &&
+        (requestBodySchema != null || requestBodyContent != null))
       'requestBody': <String, dynamic>{
         'required': true,
         'description': requestBodyDescription,
         'content': <String, dynamic>{
-          'application/json': <String, dynamic>{
-            'schema': requestBodySchema,
-            if (requestBodyExample != null) 'example': requestBodyExample,
-          },
-        },
+          ...?requestBodyContent,
+          if (requestBodyContent == null)
+            'application/json': <String, dynamic>{
+              'schema': requestBodySchema,
+              if (requestBodyExample != null) 'example': requestBodyExample,
+            },
+        }..removeWhere((_, value) => value == null),
       },
     'responses': responses,
   };

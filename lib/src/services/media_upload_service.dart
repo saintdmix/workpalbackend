@@ -12,11 +12,14 @@ class MediaUploadService {
   MediaUploadService({
     FirebaseAuthRestClient? authClient,
     FirebaseStorageRestClient? storageClient,
-  })  : _authClient = authClient ??
-            FirebaseAuthRestClient(webApiKey: AppEnv.firebaseWebApiKey),
-        _storageClient = storageClient ??
-            FirebaseStorageRestClient(
-                storageBucket: AppEnv.firebaseStorageBucket);
+  }) : _authClient =
+           authClient ??
+           FirebaseAuthRestClient(webApiKey: AppEnv.firebaseWebApiKey),
+       _storageClient =
+           storageClient ??
+           FirebaseStorageRestClient(
+             storageBucket: AppEnv.firebaseStorageBucket,
+           );
 
   final FirebaseAuthRestClient _authClient;
   final FirebaseStorageRestClient _storageClient;
@@ -32,7 +35,8 @@ class MediaUploadService {
       'mediaBase64',
       aliases: const <String>['base64', 'data'],
     );
-    final contentType = _optionalString(payload, 'contentType') ??
+    final contentType =
+        _optionalString(payload, 'contentType') ??
         _guessContentType(mediaBase64) ??
         'application/octet-stream';
     final folder = _optionalString(payload, 'folder') ?? 'uploads';
@@ -71,7 +75,8 @@ class MediaUploadService {
     String? contentType,
   }) async {
     final uid = await _resolveUid(idToken);
-    final resolvedType = contentType ??
+    final resolvedType =
+        contentType ??
         _guessContentType(mediaBase64) ??
         'application/octet-stream';
     final bytes = _decodeMediaBytes(mediaBase64);
@@ -87,6 +92,49 @@ class MediaUploadService {
       bytes: bytes,
       contentType: resolvedType,
     );
+    return <String, dynamic>{
+      'uploadedBy': uid,
+      'objectPath': objectPath,
+      'downloadUrl': upload.downloadUrl,
+      'bucket': upload.bucket,
+      'sizeBytes': upload.sizeBytes,
+      'contentType': upload.contentType,
+      'fileName': resolvedName,
+    };
+  }
+
+  Future<Map<String, dynamic>> uploadBytesForPath({
+    required String idToken,
+    required List<int> bytes,
+    required String folder,
+    required String defaultNamePrefix,
+    String? fileName,
+    String? contentType,
+  }) async {
+    final uid = await _resolveUid(idToken);
+    final resolvedType =
+        (contentType ?? 'application/octet-stream').trim().isEmpty
+        ? 'application/octet-stream'
+        : (contentType ?? 'application/octet-stream').trim();
+    final ext = _extensionFor(resolvedType);
+    final resolvedName = (fileName ?? '').trim().isNotEmpty
+        ? fileName!.trim()
+        : _nextName(
+            uid: uid,
+            extension: ext.isNotEmpty ? ext : '',
+          );
+    final objectPath = _buildObjectPath(
+      folder: folder,
+      fileName: resolvedName,
+    );
+
+    final upload = await _storageClient.uploadBytes(
+      idToken: idToken,
+      objectPath: objectPath,
+      bytes: bytes,
+      contentType: resolvedType,
+    );
+
     return <String, dynamic>{
       'uploadedBy': uid,
       'objectPath': objectPath,
