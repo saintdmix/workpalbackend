@@ -56,6 +56,12 @@ class ProfileService {
       'role': normalizedRole,
       'createdAt': (roleProfile ?? legacyProfile)?['createdAt'] ?? now,
       'updatedAt': now,
+      'rating': _asDouble((roleProfile ?? legacyProfile)?['rating']) ?? 0.0,
+      'ratingQuality': _asDouble((roleProfile ?? legacyProfile)?['ratingQuality']) ?? 0.0,
+      'ratingComm': _asDouble((roleProfile ?? legacyProfile)?['ratingComm']) ?? 0.0,
+      'ratingTimeliness': _asDouble((roleProfile ?? legacyProfile)?['ratingTimeliness']) ?? 0.0,
+      'ratingValue': _asDouble((roleProfile ?? legacyProfile)?['ratingValue']) ?? 0.0,
+      'reviewCount': _asInt((roleProfile ?? legacyProfile)?['reviewCount']) ?? 0,
     };
 
     // Persist the merged profile so subsequent reads stay consistent.
@@ -156,6 +162,24 @@ class ProfileService {
 
   String _collectionForRole(String role) {
     return role == 'artisan' ? 'artisans' : 'customers';
+  }
+
+  double? _asDouble(dynamic value) {
+    if (value is double) return value;
+    if (value is num) return value.toDouble();
+    if (value is String && value.trim().isNotEmpty) {
+      return double.tryParse(value.trim());
+    }
+    return null;
+  }
+
+  int? _asInt(dynamic value) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    if (value is String && value.trim().isNotEmpty) {
+      return int.tryParse(value.trim());
+    }
+    return null;
   }
 
   Map<String, dynamic> _sanitizeUpdates(Map<String, dynamic> updates) {

@@ -489,6 +489,10 @@ Map<String, dynamic> buildOpenApiSpec({
                       'items': <String, dynamic>{'type': 'string'},
                     },
                     'isAdminPost': <String, dynamic>{'type': 'boolean'},
+                    'isVerified': <String, dynamic>{
+                      'type': 'boolean',
+                      'description': 'Whether the posting artisan is verified.',
+                    },
                     'latitude': <String, dynamic>{'type': 'number'},
                     'longitude': <String, dynamic>{'type': 'number'},
                   },

@@ -87,7 +87,46 @@ class WorkfeedService {
         ? filtered
         : filtered.sublist(0, safeLimit);
 
-    return (items: trimmed, nextPageToken: page.nextPageToken);
+    final enriched = await _enrichWithVerification(
+      posts: trimmed,
+      idToken: idToken,
+    );
+
+    return (items: enriched, nextPageToken: page.nextPageToken);
+  }
+
+  Future<List<Map<String, dynamic>>> _enrichWithVerification({
+    required List<Map<String, dynamic>> posts,
+    required String idToken,
+  }) async {
+    final uniqueIds = posts
+        .map((p) => '${p['artisanId'] ?? ''}'.trim())
+        .where((id) => id.isNotEmpty)
+        .toSet();
+
+    final verifiedMap = <String, bool>{};
+    for (final uid in uniqueIds) {
+      for (final collection in const <String>['artisans', 'vendors']) {
+        final doc = await _firestoreClient.getDocument(
+          collectionPath: collection,
+          documentId: uid,
+          idToken: idToken,
+        );
+        if (doc != null) {
+          verifiedMap[uid] = doc['isVerified'] == true;
+          break;
+        }
+      }
+      verifiedMap.putIfAbsent(uid, () => false);
+    }
+
+    return posts.map((post) {
+      final uid = '${post['artisanId'] ?? ''}'.trim();
+      return <String, dynamic>{
+        ...post,
+        'isVerified': verifiedMap[uid] ?? false,
+      };
+    }).toList();
   }
 
   Future<Map<String, dynamic>> getWorkfeed({
