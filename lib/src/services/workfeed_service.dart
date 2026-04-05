@@ -104,7 +104,7 @@ class WorkfeedService {
         .where((id) => id.isNotEmpty)
         .toSet();
 
-    final verifiedMap = <String, bool>{};
+    final profileMap = <String, Map<String, dynamic>>{};
     for (final uid in uniqueIds) {
       for (final collection in const <String>['artisans', 'vendors']) {
         final doc = await _firestoreClient.getDocument(
@@ -113,18 +113,38 @@ class WorkfeedService {
           idToken: idToken,
         );
         if (doc != null) {
-          verifiedMap[uid] = doc['isVerified'] == true;
+          profileMap[uid] = doc;
           break;
         }
       }
-      verifiedMap.putIfAbsent(uid, () => false);
     }
 
     return posts.map((post) {
       final uid = '${post['artisanId'] ?? ''}'.trim();
+      final profile = profileMap[uid] ?? const <String, dynamic>{};
       return <String, dynamic>{
         ...post,
-        'isVerified': verifiedMap[uid] ?? false,
+        'isVerified': profile['isVerified'] == true,
+        'artisanName': post['artisanName'] ??
+            profile['name'] ??
+            profile['username'] ??
+            profile['displayName'] ??
+            '',
+        'artisanUsername': post['artisanUsername'] ??
+            profile['username'] ??
+            profile['name'] ??
+            '',
+        'artisanImage': post['artisanImage'] ??
+            post['profileImage'] ??
+            profile['profileImageUrl'] ??
+            profile['imageUrl'] ??
+            profile['profileImage'] ??
+            '',
+        'artisanTitle': post['artisanTitle'] ??
+            profile['title'] ??
+            profile['artisanTitle'] ??
+            '',
+        'artisanRating': profile['rating'] ?? 0.0,
       };
     }).toList();
   }
