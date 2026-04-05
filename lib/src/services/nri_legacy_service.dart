@@ -718,11 +718,13 @@ class NriLegacyService {
     data.remove('mediaBase64');
     data.remove('fileName');
     data.remove('contentType');
-    await _firestoreClient.setDocument(
+    // Use createDocument so Firestore returns a clear 404-free response even
+    // when the document does not already exist.
+    await _firestoreClient.createDocument(
       collectionPath: 'news',
-      documentId: id,
       idToken: idToken,
       data: data,
+      documentId: id,
     );
     return data;
   }

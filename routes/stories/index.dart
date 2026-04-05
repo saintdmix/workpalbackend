@@ -20,12 +20,26 @@ Future<Response> onRequest(RequestContext context) async {
           int.tryParse(request.uri.queryParameters['limit'] ?? '') ?? 50;
       final hours =
           int.tryParse(request.uri.queryParameters['withinHours'] ?? '') ?? 48;
+      final latitude =
+          _parseDoubleParam(request.uri.queryParameters['latitude'], 'latitude');
+      final longitude = _parseDoubleParam(
+        request.uri.queryParameters['longitude'],
+        'longitude',
+      );
+
+      if ((latitude == null) != (longitude == null)) {
+        throw ApiException.badRequest(
+          'latitude and longitude are required together.',
+        );
+      }
 
       final items = await storiesService.listStories(
         idToken: idToken,
         artisanId: artisanId,
         limit: limit,
         withinHours: hours,
+        latitude: latitude,
+        longitude: longitude,
       );
       return Response.json(statusCode: HttpStatus.ok, body: {'items': items});
     }
@@ -51,4 +65,13 @@ Future<Response> onRequest(RequestContext context) async {
       body: {'error': 'Unexpected server error.'},
     );
   }
+}
+
+double? _parseDoubleParam(String? value, String name) {
+  if (value == null || value.trim().isEmpty) return null;
+  final parsed = double.tryParse(value.trim());
+  if (parsed == null) {
+    throw ApiException.badRequest('$name must be a valid number.');
+  }
+  return parsed;
 }

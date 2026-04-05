@@ -27,12 +27,14 @@ class FirebaseStorageRestClient {
 
     final uri = Uri.parse(
       'https://firebasestorage.googleapis.com/v0/b/$_storageBucket/o'
-      '?uploadType=media&name=${Uri.encodeQueryComponent(normalizedPath)}',
+      '?name=${Uri.encodeQueryComponent(normalizedPath)}',
     );
 
     final response = await _http.post(
       uri,
       headers: <String, String>{
+        // Firebase Storage accepts Firebase ID tokens for authenticated users.
+        // The API expects the token in the Authorization header.
         'authorization': 'Bearer $idToken',
         'content-type': contentType,
       },

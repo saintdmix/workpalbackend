@@ -2,6 +2,7 @@ import 'package:workpalbackend/src/config/env.dart';
 import 'package:workpalbackend/src/exceptions/api_exception.dart';
 import 'package:workpalbackend/src/firebase/firebase_auth_rest_client.dart';
 import 'package:workpalbackend/src/firebase/firestore_rest_client.dart';
+import 'package:workpalbackend/src/utils/geo.dart';
 
 final workfeedService = WorkfeedService();
 
@@ -9,40 +10,84 @@ class WorkfeedService {
   WorkfeedService({
     FirebaseAuthRestClient? authClient,
     FirestoreRestClient? firestoreClient,
-  })  : _authClient = authClient ??
-            FirebaseAuthRestClient(webApiKey: AppEnv.firebaseWebApiKey),
-        _firestoreClient = firestoreClient ??
-            FirestoreRestClient(
-              projectId: AppEnv.firebaseProjectId,
-              webApiKey: AppEnv.firebaseWebApiKey,
-            );
+  }) : _authClient =
+           authClient ??
+           FirebaseAuthRestClient(webApiKey: AppEnv.firebaseWebApiKey),
+       _firestoreClient =
+           firestoreClient ??
+           FirestoreRestClient(
+             projectId: AppEnv.firebaseProjectId,
+             webApiKey: AppEnv.firebaseWebApiKey,
+           );
 
   final FirebaseAuthRestClient _authClient;
   final FirestoreRestClient _firestoreClient;
 
-  Future<List<Map<String, dynamic>>> listWorkfeeds({
+  Future<({List<Map<String, dynamic>> items, String? nextPageToken})> listWorkfeeds({
     required String idToken,
     int limit = 20,
     String? artisanId,
+    bool followingOnly = false,
+    String? pageToken,
+    double? latitude,
+    double? longitude,
   }) async {
-    await _resolveUid(idToken);
+    final uid = await _resolveUid(idToken);
 
-    final safeLimit = limit.clamp(1, 100).toInt();
-    final items = await _firestoreClient.listDocuments(
-      collectionPath: 'posts',
-      idToken: idToken,
-      pageSize: safeLimit,
-      orderBy: 'timestamp desc',
-    );
+    final safeLimit = limit.clamp(1, 100);
+    final followedIds = followingOnly
+        ? await _readFollowingIds(idToken: idToken, uid: uid)
+        : const <String>{};
 
-    if (artisanId == null || artisanId.trim().isEmpty) {
-      return items;
+    if (followingOnly && followedIds.isEmpty) {
+      return (items: <Map<String, dynamic>>[], nextPageToken: null);
     }
 
-    final normalized = artisanId.trim();
-    return items
-        .where((item) => '${item['artisanId'] ?? ''}' == normalized)
-        .toList();
+    final fetchLimit = followingOnly ? 100 : safeLimit;
+    final page = await _firestoreClient.listDocumentsPage(
+      collectionPath: 'posts',
+      idToken: idToken,
+      pageSize: fetchLimit,
+      orderBy: 'timestamp desc',
+      pageToken: pageToken,
+    );
+
+    final normalizedArtisanId = artisanId?.trim();
+    final hasLocationFilter = latitude != null && longitude != null;
+    final filtered = page.documents.where((item) {
+      final postArtisanId = '${item['artisanId'] ?? ''}'.trim();
+
+      if (normalizedArtisanId != null &&
+          normalizedArtisanId.isNotEmpty &&
+          postArtisanId != normalizedArtisanId) {
+        return false;
+      }
+
+      if (followingOnly && !followedIds.contains(postArtisanId)) {
+        return false;
+      }
+
+      if (hasLocationFilter) {
+        final itemLat = _readDouble(item['latitude']);
+        final itemLon = _readDouble(item['longitude']);
+        if (itemLat == null || itemLon == null) return false;
+        final km = distanceKm(
+          lat1: latitude!,
+          lon1: longitude!,
+          lat2: itemLat,
+          lon2: itemLon,
+        );
+        if (km > 10) return false;
+      }
+
+      return true;
+    }).toList();
+
+    final trimmed = filtered.length <= safeLimit
+        ? filtered
+        : filtered.sublist(0, safeLimit);
+
+    return (items: trimmed, nextPageToken: page.nextPageToken);
   }
 
   Future<Map<String, dynamic>> getWorkfeed({
@@ -75,7 +120,8 @@ class WorkfeedService {
   }) async {
     final uid = await _resolveUid(idToken);
     final media = _readMediaUrls(payload);
-    final content = _optionalString(payload, 'content') ??
+    final content =
+        _optionalString(payload, 'content') ??
         _optionalString(payload, 'caption') ??
         '';
 
@@ -179,6 +225,27 @@ class WorkfeedService {
     return uid;
   }
 
+  Future<Set<String>> _readFollowingIds({
+    required String idToken,
+    required String uid,
+  }) async {
+    final followed = <String>{};
+    for (final collection in const <String>[
+      'customers',
+      'vendors',
+      'artisans',
+    ]) {
+      final profile = await _firestoreClient.getDocument(
+        collectionPath: collection,
+        documentId: uid,
+        idToken: idToken,
+      );
+      if (profile == null) continue;
+      followed.addAll(_readStringList(profile['followingIds']));
+    }
+    return followed;
+  }
+
   List<String> _readMediaUrls(Map<String, dynamic> payload) {
     final primary = payload['imageUrl'];
     final fallback = payload['mediaUrls'];
@@ -230,5 +297,22 @@ class WorkfeedService {
       result[entry.key] = entry.value;
     }
     return result;
+  }
+
+  List<String> _readStringList(dynamic value) {
+    if (value is! List) return <String>[];
+    final out = <String>[];
+    for (final item in value) {
+      if (item is String && item.trim().isNotEmpty) out.add(item.trim());
+    }
+    return out;
+  }
+
+  double? _readDouble(dynamic value) {
+    if (value is num) return value.toDouble();
+    if (value is String && value.trim().isNotEmpty) {
+      return double.tryParse(value.trim());
+    }
+    return null;
   }
 }

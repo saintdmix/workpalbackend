@@ -2,6 +2,7 @@ import 'package:workpalbackend/src/config/env.dart';
 import 'package:workpalbackend/src/exceptions/api_exception.dart';
 import 'package:workpalbackend/src/firebase/firebase_auth_rest_client.dart';
 import 'package:workpalbackend/src/firebase/firestore_rest_client.dart';
+import 'package:workpalbackend/src/utils/geo.dart';
 
 final storiesService = StoriesService();
 
@@ -25,6 +26,8 @@ class StoriesService {
     String? artisanId,
     int limit = 50,
     int withinHours = 48,
+    double? latitude,
+    double? longitude,
   }) async {
     await _resolveUid(idToken);
     final safeLimit = limit.clamp(1, 200).toInt();
@@ -40,6 +43,7 @@ class StoriesService {
     );
 
     final normalizedArtisanId = artisanId?.trim();
+    final hasLocationFilter = latitude != null && longitude != null;
     final filtered = docs
         .where((doc) {
           final rawArtisanId = '${doc['artisanId'] ?? ''}';
@@ -52,6 +56,19 @@ class StoriesService {
           final ts = _parseDateTime(doc['timestamp']);
           if (ts == null) return false;
           return !ts.isBefore(cutoff);
+        })
+        .where((doc) {
+          if (!hasLocationFilter) return true;
+          final itemLat = _readDouble(doc['latitude']);
+          final itemLon = _readDouble(doc['longitude']);
+          if (itemLat == null || itemLon == null) return false;
+          final km = distanceKm(
+            lat1: latitude!,
+            lon1: longitude!,
+            lat2: itemLat,
+            lon2: itemLon,
+          );
+          return km <= 10;
         })
         .take(safeLimit)
         .toList();
@@ -101,12 +118,16 @@ class StoriesService {
     required String idToken,
     int withinHours = 48,
     int limit = 50,
+    double? latitude,
+    double? longitude,
   }) async {
     await _resolveUid(idToken);
     final stories = await listStories(
       idToken: idToken,
       limit: 400,
       withinHours: withinHours,
+      latitude: latitude,
+      longitude: longitude,
     );
 
     final byVendor = <String, _VendorStoryMeta>{};
@@ -294,6 +315,14 @@ class StoriesService {
       }
     }
     return urls;
+  }
+
+  double? _readDouble(dynamic value) {
+    if (value is num) return value.toDouble();
+    if (value is String && value.trim().isNotEmpty) {
+      return double.tryParse(value.trim());
+    }
+    return null;
   }
 }
 

@@ -252,6 +252,14 @@ Map<String, dynamic> buildOpenApiSpec({
               name: 'withinHours',
               description: 'Only stories within N hours.',
             ),
+            _queryParam(
+              name: 'latitude',
+              description: 'User latitude to filter stories within 10km.',
+            ),
+            _queryParam(
+              name: 'longitude',
+              description: 'User longitude to filter stories within 10km.',
+            ),
           ],
         ),
         'post': _operation(
@@ -298,6 +306,14 @@ Map<String, dynamic> buildOpenApiSpec({
             _queryParam(
               name: 'withinHours',
               description: 'Only active stories within N hours.',
+            ),
+            _queryParam(
+              name: 'latitude',
+              description: 'User latitude to filter vendors within 10km.',
+            ),
+            _queryParam(
+              name: 'longitude',
+              description: 'User longitude to filter vendors within 10km.',
             ),
           ],
         ),
@@ -426,10 +442,66 @@ Map<String, dynamic> buildOpenApiSpec({
           parameters: <Map<String, dynamic>>[
             _queryParam(name: 'limit', description: 'Max number of posts.'),
             _queryParam(
+              name: 'pageToken',
+              description: 'Pagination cursor token from previous response.',
+            ),
+            _queryParam(
               name: 'artisanId',
               description: 'Filter by artisan id.',
             ),
+            _queryParam(
+              name: 'filter',
+              description:
+                  'Set to `following` to show posts from followed artisans only.',
+            ),
+            _queryParam(
+              name: 'following',
+              description:
+                  'Boolean alternative to `filter=following` (true/false).',
+            ),
+            _queryParam(
+              name: 'latitude',
+              description: 'User latitude to filter posts within 10km.',
+            ),
+            _queryParam(
+              name: 'longitude',
+              description: 'User longitude to filter posts within 10km.',
+            ),
           ],
+          successResponseSchema: <String, dynamic>{
+            'type': 'object',
+            'properties': <String, dynamic>{
+              'items': <String, dynamic>{
+                'type': 'array',
+                'items': <String, dynamic>{
+                  'type': 'object',
+                  'properties': <String, dynamic>{
+                    'id': <String, dynamic>{'type': 'string'},
+                    'artisanId': <String, dynamic>{'type': 'string'},
+                    'content': <String, dynamic>{'type': 'string'},
+                    'imageUrl': <String, dynamic>{
+                      'type': 'array',
+                      'items': <String, dynamic>{'type': 'string'},
+                    },
+                    'timestamp': <String, dynamic>{'type': 'string'},
+                    'likes': <String, dynamic>{
+                      'type': 'array',
+                      'items': <String, dynamic>{'type': 'string'},
+                    },
+                    'isAdminPost': <String, dynamic>{'type': 'boolean'},
+                    'latitude': <String, dynamic>{'type': 'number'},
+                    'longitude': <String, dynamic>{'type': 'number'},
+                  },
+                  'additionalProperties': true,
+                },
+              },
+              'nextPageToken': <String, dynamic>{
+                'type': 'string',
+                'description':
+                    'Pass as pageToken to fetch the next page. Absent when no more pages.',
+              },
+            },
+          },
         ),
         'post': _operation(
           summary: 'Create workfeed post',
@@ -447,7 +519,10 @@ Map<String, dynamic> buildOpenApiSpec({
                 'type': 'array',
                 'items': <String, dynamic>{'type': 'string'},
               },
-              'isAdminPost': <String, dynamic>{'type': 'boolean'},
+              'isAdminPost': <String, dynamic>{
+                'type': 'boolean',
+                'description': 'Mark post as an admin post. Defaults to false.',
+              },
               'latitude': <String, dynamic>{'type': 'number'},
               'longitude': <String, dynamic>{'type': 'number'},
               'mirrorToStories': <String, dynamic>{'type': 'boolean'},
@@ -999,6 +1074,356 @@ Map<String, dynamic> buildOpenApiSpec({
           },
         ),
       },
+      '/jobs': <String, dynamic>{
+        'get': _operation(
+          summary: 'List job posts',
+          tag: 'Hiring',
+          parameters: <Map<String, dynamic>>[
+            _queryParam(
+              name: 'role',
+              description: 'Role hint: customer|vendor|artisan.',
+            ),
+            _queryParam(name: 'limit', description: 'Max number of jobs.'),
+            _queryParam(
+              name: 'pageToken',
+              description: 'Pagination cursor token.',
+            ),
+            _queryParam(name: 'status', description: 'Filter by job status.'),
+            _queryParam(
+              name: 'customerId',
+              description: 'Filter by customer id.',
+            ),
+            _queryParam(name: 'category', description: 'Filter by category.'),
+            _queryParam(name: 'search', description: 'Search text.'),
+            _queryParam(
+              name: 'mine',
+              description: 'Set true to show only jobs owned by caller.',
+            ),
+          ],
+        ),
+        'post': _operation(
+          summary: 'Create job post',
+          tag: 'Hiring',
+          parameters: <Map<String, dynamic>>[
+            _queryParam(
+              name: 'role',
+              description: 'Role hint (must be customer to create).',
+            ),
+          ],
+          requestBodyDescription: 'Job post payload.',
+          requestBodySchema: _objectSchema(
+            properties: <String, dynamic>{
+              'title': _stringSchema(),
+              'category': _stringSchema(),
+              'description': _stringSchema(),
+              'budgetMin': <String, dynamic>{'type': 'number'},
+              'budgetMax': <String, dynamic>{'type': 'number'},
+              'isUrgent': <String, dynamic>{'type': 'boolean'},
+              'isRemote': <String, dynamic>{'type': 'boolean'},
+              'address': _stringSchema(),
+              'location': <String, dynamic>{
+                'type': 'object',
+                'additionalProperties': true,
+              },
+              'latitude': <String, dynamic>{'type': 'number'},
+              'longitude': <String, dynamic>{'type': 'number'},
+              'startDate': _stringSchema(),
+              'endDate': _stringSchema(),
+              'refImages': <String, dynamic>{
+                'type': 'array',
+                'items': <String, dynamic>{'type': 'string'},
+              },
+              'mediaImages': <String, dynamic>{
+                'type': 'array',
+                'items': <String, dynamic>{'type': 'string'},
+              },
+              'requirements': <String, dynamic>{
+                'type': 'array',
+                'items': <String, dynamic>{'type': 'string'},
+              },
+              'status': _stringSchema(),
+            },
+            required: const <String>['title', 'category'],
+            additionalProperties: true,
+          ),
+          requestBodyExample: <String, dynamic>{
+            'title': 'Kitchen cabinet installation',
+            'category': 'carpentry',
+            'description': 'Install custom cabinets in a 3-bedroom apartment.',
+            'budgetMin': 120000,
+            'budgetMax': 250000,
+            'isUrgent': true,
+            'isRemote': false,
+            'address': 'Lekki, Lagos',
+          },
+          successCode: 201,
+          successDescription: 'Job post created.',
+        ),
+      },
+      '/jobs/{job_id}': <String, dynamic>{
+        'get': _operation(
+          summary: 'Get job post',
+          tag: 'Hiring',
+          parameters: <Map<String, dynamic>>[
+            _pathParam(name: 'job_id'),
+          ],
+        ),
+        'patch': _operation(
+          summary: 'Update job post',
+          tag: 'Hiring',
+          parameters: <Map<String, dynamic>>[
+            _pathParam(name: 'job_id'),
+            _queryParam(
+              name: 'role',
+              description: 'Role hint: customer|vendor|artisan.',
+            ),
+          ],
+          requestBodyDescription: 'Job update payload.',
+          requestBodySchema: _objectSchema(
+            properties: <String, dynamic>{
+              'title': _stringSchema(),
+              'description': _stringSchema(),
+              'category': _stringSchema(),
+              'status': _stringSchema(),
+              'budgetMin': <String, dynamic>{'type': 'number'},
+              'budgetMax': <String, dynamic>{'type': 'number'},
+              'isUrgent': <String, dynamic>{'type': 'boolean'},
+              'isRemote': <String, dynamic>{'type': 'boolean'},
+              'address': _stringSchema(),
+              'location': <String, dynamic>{
+                'type': 'object',
+                'additionalProperties': true,
+              },
+              'latitude': <String, dynamic>{'type': 'number'},
+              'longitude': <String, dynamic>{'type': 'number'},
+              'refImages': <String, dynamic>{
+                'type': 'array',
+                'items': <String, dynamic>{'type': 'string'},
+              },
+              'mediaImages': <String, dynamic>{
+                'type': 'array',
+                'items': <String, dynamic>{'type': 'string'},
+              },
+              'requirements': <String, dynamic>{
+                'type': 'array',
+                'items': <String, dynamic>{'type': 'string'},
+              },
+            },
+            additionalProperties: true,
+          ),
+          requestBodyExample: <String, dynamic>{
+            'status': 'in_progress',
+            'budgetMax': 300000,
+          },
+        ),
+        'delete': _operation(
+          summary: 'Delete job post',
+          tag: 'Hiring',
+          parameters: <Map<String, dynamic>>[
+            _pathParam(name: 'job_id'),
+            _queryParam(
+              name: 'role',
+              description: 'Role hint: customer|vendor|artisan.',
+            ),
+          ],
+        ),
+      },
+      '/jobs/{job_id}/apply': <String, dynamic>{
+        'post': _operation(
+          summary: 'Apply to job post',
+          tag: 'Hiring',
+          parameters: <Map<String, dynamic>>[
+            _pathParam(name: 'job_id'),
+            _queryParam(
+              name: 'role',
+              description: 'Role hint (vendor|artisan).',
+            ),
+          ],
+        ),
+      },
+      '/quotes': <String, dynamic>{
+        'get': _operation(
+          summary: 'List quotes',
+          tag: 'Hiring',
+          parameters: <Map<String, dynamic>>[
+            _queryParam(
+              name: 'role',
+              description: 'Role hint: customer|vendor|artisan.',
+            ),
+            _queryParam(
+              name: 'chatRoomId',
+              description: 'Filter by chat room.',
+            ),
+            _queryParam(name: 'limit', description: 'Max number of quotes.'),
+            _queryParam(name: 'status', description: 'Filter by quote status.'),
+            _queryParam(name: 'jobId', description: 'Filter by job id.'),
+          ],
+        ),
+        'post': _operation(
+          summary: 'Create quote',
+          tag: 'Hiring',
+          parameters: <Map<String, dynamic>>[
+            _queryParam(
+              name: 'role',
+              description: 'Role hint: customer|vendor|artisan.',
+            ),
+          ],
+          requestBodyDescription: 'Quote payload.',
+          requestBodySchema: _objectSchema(
+            properties: <String, dynamic>{
+              'otherId': _stringSchema(),
+              'chatRoomId': _stringSchema(),
+              'text': _stringSchema(),
+              'quoteStatus': _stringSchema(),
+              'isNegotiatedQuote': <String, dynamic>{'type': 'boolean'},
+              'imageUrls': <String, dynamic>{
+                'type': 'array',
+                'items': <String, dynamic>{'type': 'string'},
+              },
+              'videoUrls': <String, dynamic>{
+                'type': 'array',
+                'items': <String, dynamic>{'type': 'string'},
+              },
+              'quoteData': <String, dynamic>{
+                'type': 'object',
+                'additionalProperties': true,
+              },
+            },
+            required: const <String>['otherId'],
+            additionalProperties: true,
+          ),
+          requestBodyExample: <String, dynamic>{
+            'otherId': 'uid_customer_001',
+            'chatRoomId': 'uid_customer_001_uid_vendor_001',
+            'quoteData': <String, dynamic>{
+              'jobId': 'job_123',
+              'projectName': 'Kitchen cabinet installation',
+              'total': 200000,
+            },
+          },
+          successCode: 201,
+          successDescription: 'Quote created.',
+        ),
+      },
+      '/quotes/{quote_id}': <String, dynamic>{
+        'get': _operation(
+          summary: 'Get quote',
+          tag: 'Hiring',
+          parameters: <Map<String, dynamic>>[
+            _pathParam(name: 'quote_id'),
+            _queryParam(
+              name: 'chatRoomId',
+              description: 'Chat room id that contains the quote.',
+              required: true,
+            ),
+            _queryParam(
+              name: 'role',
+              description: 'Role hint: customer|vendor|artisan.',
+            ),
+          ],
+        ),
+        'patch': _operation(
+          summary: 'Update quote status',
+          tag: 'Hiring',
+          parameters: <Map<String, dynamic>>[
+            _pathParam(name: 'quote_id'),
+            _queryParam(
+              name: 'chatRoomId',
+              description: 'Chat room id that contains the quote.',
+              required: true,
+            ),
+            _queryParam(
+              name: 'role',
+              description: 'Role hint: customer|vendor|artisan.',
+            ),
+          ],
+          requestBodyDescription: 'Quote status payload.',
+          requestBodySchema: _objectSchema(
+            properties: <String, dynamic>{
+              'status': _stringSchema(),
+            },
+            required: const <String>['status'],
+          ),
+          requestBodyExample: <String, dynamic>{'status': 'accepted'},
+        ),
+      },
+      '/active_projects': <String, dynamic>{
+        'get': _operation(
+          summary: 'List active projects',
+          tag: 'Hiring',
+          parameters: <Map<String, dynamic>>[
+            _queryParam(
+              name: 'role',
+              description: 'Role hint: customer|vendor|artisan.',
+            ),
+            _queryParam(
+              name: 'limit',
+              description: 'Max number of active projects.',
+            ),
+            _queryParam(
+              name: 'pageToken',
+              description: 'Pagination cursor token.',
+            ),
+            _queryParam(
+              name: 'status',
+              description: 'Filter by project status.',
+            ),
+            _queryParam(
+              name: 'mine',
+              description: 'Set true to show only your projects.',
+            ),
+            _queryParam(name: 'search', description: 'Search text.'),
+          ],
+        ),
+      },
+      '/active_projects/{project_id}': <String, dynamic>{
+        'get': _operation(
+          summary: 'Get active project',
+          tag: 'Hiring',
+          parameters: <Map<String, dynamic>>[
+            _pathParam(name: 'project_id'),
+            _queryParam(
+              name: 'role',
+              description: 'Role hint: customer|vendor|artisan.',
+            ),
+          ],
+        ),
+        'patch': _operation(
+          summary: 'Update active project',
+          tag: 'Hiring',
+          parameters: <Map<String, dynamic>>[
+            _pathParam(name: 'project_id'),
+            _queryParam(
+              name: 'role',
+              description: 'Role hint: customer|vendor|artisan.',
+            ),
+          ],
+          requestBodyDescription: 'Active project update payload.',
+          requestBodySchema: _objectSchema(
+            properties: <String, dynamic>{
+              'status': _stringSchema(),
+              'projectStatus': _stringSchema(),
+              'title': _stringSchema(),
+              'description': _stringSchema(),
+            },
+            additionalProperties: true,
+          ),
+          requestBodyExample: <String, dynamic>{
+            'status': 'completed',
+          },
+        ),
+        'delete': _operation(
+          summary: 'Delete active project',
+          tag: 'Hiring',
+          parameters: <Map<String, dynamic>>[
+            _pathParam(name: 'project_id'),
+            _queryParam(
+              name: 'role',
+              description: 'Role hint: customer|vendor|artisan.',
+            ),
+          ],
+        ),
+      },
       '/vendors': <String, dynamic>{
         'get': _operation(
           summary: 'Discover vendors',
@@ -1283,18 +1708,38 @@ Map<String, dynamic> buildOpenApiSpec({
         'post': _operation(
           summary: 'Create news',
           tag: 'Legacy',
-          requestBodyDescription: 'News payload.',
-          requestBodySchema: _objectSchema(
-            properties: <String, dynamic>{
-              'title': _stringSchema(),
-              'body': _stringSchema(),
-              'imageUrl': _stringSchema(),
+          requestBodyDescription: 'News payload (JSON or multipart/form-data).',
+          requestBodyContent: <String, dynamic>{
+            'application/json': <String, dynamic>{
+              'schema': _objectSchema(
+                properties: <String, dynamic>{
+                  'title': _stringSchema(),
+                  'body': _stringSchema(),
+                  'imageUrl': _stringSchema(),
+                },
+                additionalProperties: true,
+              ),
+              'example': <String, dynamic>{
+                'title': 'Weekly Update',
+                'body': 'New products available this week.',
+              },
             },
-            additionalProperties: true,
-          ),
-          requestBodyExample: <String, dynamic>{
-            'title': 'Weekly Update',
-            'body': 'New products available this week.',
+            'multipart/form-data': <String, dynamic>{
+              'schema': <String, dynamic>{
+                'type': 'object',
+                'properties': <String, dynamic>{
+                  'title': _stringSchema(),
+                  'body': _stringSchema(),
+                  'image': <String, dynamic>{
+                    'type': 'string',
+                    'format': 'binary',
+                    'description':
+                        'Image file to upload; server returns url/imageUrl.',
+                  },
+                },
+                'additionalProperties': true,
+              },
+            },
           },
           successCode: 201,
           successDescription: 'News item created.',
@@ -1830,6 +2275,7 @@ Map<String, dynamic> _operation({
   Map<String, dynamic>? requestBodySchema,
   Map<String, dynamic>? requestBodyExample,
   Map<String, dynamic>? requestBodyContent,
+  Map<String, dynamic>? successResponseSchema,
   int successCode = 200,
   String successDescription = 'Success',
   bool requiresAuth = true,
@@ -1839,10 +2285,11 @@ Map<String, dynamic> _operation({
       'description': successDescription,
       'content': <String, dynamic>{
         'application/json': <String, dynamic>{
-          'schema': <String, dynamic>{
-            'type': 'object',
-            'additionalProperties': true,
-          },
+          'schema': successResponseSchema ??
+              <String, dynamic>{
+                'type': 'object',
+                'additionalProperties': true,
+              },
         },
       },
     },
