@@ -130,13 +130,15 @@ class BillingService {
     bool isActive = false;
     String resolvedStatus = currentStatus;
     int daysRemaining = 0;
+    String computedExpiresIn = '';
 
     if (datePayed.isNotEmpty && currentStatus != 'Free') {
       final payedDate = DateTime.tryParse(datePayed)?.toUtc();
       if (payedDate != null) {
+        final expiryDate = payedDate.add(const Duration(days: 30));
+        computedExpiresIn = expiryDate.toIso8601String();
         final daysSincePayed = now.difference(payedDate).inDays;
         if (daysSincePayed >= 30) {
-          // Auto-expire: update Firestore to Free.
           resolvedStatus = 'Free';
           isActive = false;
           await _firestoreClient.setDocument(
@@ -163,7 +165,7 @@ class BillingService {
       'subscriptionStatus': resolvedStatus,
       'datePayed': datePayed,
       'daysRemaining': daysRemaining,
-      'expiresIn': doc['expiresIn'] ?? '',
+      'expiresIn': computedExpiresIn,
       'isVerified': doc['isVerified'] == true,
       'lastPaymentType': doc['lastPaymentType'] ?? '',
     };
