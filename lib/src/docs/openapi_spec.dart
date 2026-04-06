@@ -2415,6 +2415,76 @@ Map<String, dynamic> buildOpenApiSpec({
           ],
         ),
       },
+      '/subscriptions/status': <String, dynamic>{
+        'get': _operation(
+          summary: 'Check subscription status — auto-expires to Free after 30 days',
+          tag: 'Billing',
+          parameters: <Map<String, dynamic>>[
+            _queryParam(
+              name: 'userId',
+              description:
+                  'Target user id. Defaults to the authenticated caller.',
+            ),
+          ],
+          successResponseSchema: <String, dynamic>{
+            'type': 'object',
+            'properties': <String, dynamic>{
+              'userId': <String, dynamic>{'type': 'string'},
+              'role': <String, dynamic>{'type': 'string'},
+              'isActive': <String, dynamic>{
+                'type': 'boolean',
+                'description':
+                    'true if subscription is paid and within 30 days of datePayed.',
+              },
+              'subscriptionStatus': <String, dynamic>{
+                'type': 'string',
+                'description':
+                    'Current status e.g. active, Free. Auto-set to Free when expired.',
+              },
+              'datePayed': <String, dynamic>{'type': 'string'},
+              'daysRemaining': <String, dynamic>{
+                'type': 'integer',
+                'description':
+                    'Days left before subscription expires. 0 when not active.',
+              },
+              'expiresIn': <String, dynamic>{'type': 'string'},
+              'isVerified': <String, dynamic>{'type': 'boolean'},
+              'lastPaymentType': <String, dynamic>{'type': 'string'},
+            },
+          },
+        ),
+      },
+      '/subscriptions/activate': <String, dynamic>{
+        'post': _operation(
+          summary: 'Activate subscription for a user',
+          tag: 'Billing',
+          requestBodyDescription: 'Activation payload.',
+          requestBodySchema: _objectSchema(
+            properties: <String, dynamic>{
+              'userId': _stringSchema(description: 'Target user id.'),
+              'paymentType': _stringSchema(
+                description: 'Payment type e.g. premium, Ads.',
+              ),
+              'packageData': <String, dynamic>{
+                'type': 'object',
+                'additionalProperties': true,
+                'description':
+                    'Package details including duration (e.g. "1 month", "1 week").',
+              },
+            },
+            required: const <String>['userId'],
+          ),
+          requestBodyExample: <String, dynamic>{
+            'userId': 'uid_vendor_001',
+            'paymentType': 'premium',
+            'packageData': <String, dynamic>{
+              'packageName': 'Basic Plan',
+              'duration': '1 month',
+              'price': 2000,
+            },
+          },
+        ),
+      },
     },
   };
 }

@@ -29,8 +29,9 @@ class VendorProfileContentService {
     await _resolveUid(idToken);
     final normalizedId = _requiredVendorId(vendorId);
 
-    // Fetch profile from vendors then artisans.
+    // Fetch profile — vendors wins over artisans wins over users.
     Map<String, dynamic> profile = {};
+    String? foundCollection;
     for (final collection in const <String>['vendors', 'artisans']) {
       final doc = await _firestoreClient.getDocument(
         collectionPath: collection,
@@ -38,11 +39,12 @@ class VendorProfileContentService {
         idToken: idToken,
       );
       if (doc != null) {
-        profile = <String, dynamic>{...doc, ...profile};
+        profile = doc;
+        foundCollection = collection;
         break;
       }
     }
-    // Also merge users doc for any extra fields.
+    // Merge users doc underneath so role-specific data wins.
     final usersDoc = await _firestoreClient.getDocument(
       collectionPath: 'users',
       documentId: normalizedId,
@@ -56,7 +58,7 @@ class VendorProfileContentService {
     final postsPage = await _firestoreClient.listDocumentsPage(
       collectionPath: 'posts',
       idToken: idToken,
-      pageSize: 20,
+      pageSize: 80,
       orderBy: 'timestamp desc',
     );
     final posts = postsPage.documents
@@ -65,19 +67,10 @@ class VendorProfileContentService {
         .toList();
 
     // Reviews.
-    String? reviewCollection;
-    for (final c in const <String>['vendors', 'artisans']) {
-      final doc = await _firestoreClient.getDocument(
-        collectionPath: c,
-        documentId: normalizedId,
-        idToken: idToken,
-      );
-      if (doc != null) { reviewCollection = c; break; }
-    }
     List<Map<String, dynamic>> reviews = [];
-    if (reviewCollection != null) {
+    if (foundCollection != null) {
       final reviewsPage = await _firestoreClient.listDocumentsPage(
-        collectionPath: '$reviewCollection/$normalizedId/reviews',
+        collectionPath: '$foundCollection/$normalizedId/reviews',
         idToken: idToken,
         pageSize: 20,
         orderBy: 'createdAt desc',
@@ -96,18 +89,19 @@ class VendorProfileContentService {
     final jobsPage = await _firestoreClient.listDocumentsPage(
       collectionPath: 'job_posts',
       idToken: idToken,
-      pageSize: 20,
+      pageSize: 80,
       orderBy: 'createdAt desc',
     );
     final jobs = jobsPage.documents
         .where((d) =>
-            '${d['artisanId'] ?? d['vendorId'] ?? ''}'.trim() == normalizedId)
+            '${d['artisanId'] ?? d['vendorId'] ?? d['customerId'] ?? ''}'.trim() ==
+            normalizedId)
         .take(20)
         .toList();
 
     // Followers count.
     final followersPage = await _firestoreClient.listDocumentsPage(
-      collectionPath: 'vendors/$normalizedId/followers',
+      collectionPath: '${foundCollection ?? 'vendors'}/$normalizedId/followers',
       idToken: idToken,
       pageSize: 100,
     );

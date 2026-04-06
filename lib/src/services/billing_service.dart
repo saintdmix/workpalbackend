@@ -91,33 +91,82 @@ class BillingService {
     final targetUid = (userId ?? actorUid).trim();
     if (targetUid.isEmpty) throw ApiException.badRequest('userId is required.');
 
+    Map<String, dynamic>? doc;
+    String foundCollection = '';
+    String foundRole = '';
     for (final pair in const <MapEntry<String, String>>[
       MapEntry<String, String>('vendors', 'vendor'),
       MapEntry<String, String>('artisans', 'artisan'),
       MapEntry<String, String>('customers', 'customer'),
       MapEntry<String, String>('users', 'user'),
-      MapEntry<String, String>('userId', 'legacy'),
     ]) {
-      final doc = await _firestoreClient.getDocument(
+      final d = await _firestoreClient.getDocument(
         collectionPath: pair.key,
         documentId: targetUid,
         idToken: idToken,
       );
-      if (doc == null) continue;
-      return <String, dynamic>{
-        'userId': targetUid,
-        'role': pair.value,
-        'collection': pair.key,
-        'isVerified': doc['isVerified'] == true,
-        'subscriptionStatus': '${doc['subscriptionStatus'] ?? ''}',
-        'expiresIn': '${doc['expiresIn'] ?? ''}',
-        'lastPaymentType': '${doc['lastPaymentType'] ?? ''}',
-        'profile': doc,
-      };
+      if (d != null) {
+        doc = d;
+        foundCollection = pair.key;
+        foundRole = pair.value;
+        break;
+      }
     }
 
-    throw ApiException.notFound(
-        'User profile not found for subscription status.');
+    if (doc == null) {
+      throw ApiException.notFound(
+          'User profile not found for subscription status.');
+    }
+
+    // Mirror the Flutter logic exactly:
+    // 1. No datePayed → not active
+    // 2. subscriptionStatus == 'Free' → not active
+    // 3. datePayed older than 30 days → expire to Free and return not active
+    // 4. Otherwise → active
+    final datePayed = doc['datePayed']?.toString().trim() ?? '';
+    final currentStatus = doc['subscriptionStatus']?.toString().trim() ?? '';
+    final now = DateTime.now().toUtc();
+
+    bool isActive = false;
+    String resolvedStatus = currentStatus;
+    int daysRemaining = 0;
+
+    if (datePayed.isNotEmpty && currentStatus != 'Free') {
+      final payedDate = DateTime.tryParse(datePayed)?.toUtc();
+      if (payedDate != null) {
+        final daysSincePayed = now.difference(payedDate).inDays;
+        if (daysSincePayed >= 30) {
+          // Auto-expire: update Firestore to Free.
+          resolvedStatus = 'Free';
+          isActive = false;
+          await _firestoreClient.setDocument(
+            collectionPath: foundCollection,
+            documentId: targetUid,
+            idToken: idToken,
+            data: <String, dynamic>{
+              ...doc,
+              'subscriptionStatus': 'Free',
+              'updatedAt': now.toIso8601String(),
+            },
+          );
+        } else {
+          isActive = true;
+          daysRemaining = 30 - daysSincePayed;
+        }
+      }
+    }
+
+    return <String, dynamic>{
+      'userId': targetUid,
+      'role': foundRole,
+      'isActive': isActive,
+      'subscriptionStatus': resolvedStatus,
+      'datePayed': datePayed,
+      'daysRemaining': daysRemaining,
+      'expiresIn': doc['expiresIn'] ?? '',
+      'isVerified': doc['isVerified'] == true,
+      'lastPaymentType': doc['lastPaymentType'] ?? '',
+    };
   }
 
   Future<Map<String, dynamic>> activateSubscription({

@@ -13,12 +13,9 @@ Future<Response> onRequest(RequestContext context, String vendor_id) async {
 
   try {
     final idToken = requireBearerToken(request);
-    final vendorId = request.uri.pathSegments
-        .firstWhere((s) => s.isNotEmpty, orElse: () => vendor_id);
-
     final result = await vendorProfileContentService.getFullVendorProfile(
       idToken: idToken,
-      vendorId: vendorId,
+      vendorId: vendor_id,
     );
     return Response.json(statusCode: HttpStatus.ok, body: result);
   } on ApiException catch (e) {
