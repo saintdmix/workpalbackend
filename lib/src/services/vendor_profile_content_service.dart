@@ -22,6 +22,117 @@ class VendorProfileContentService {
   final FirebaseAuthRestClient _authClient;
   final FirestoreRestClient _firestoreClient;
 
+  Future<Map<String, dynamic>> getFullVendorProfile({
+    required String idToken,
+    required String vendorId,
+  }) async {
+    await _resolveUid(idToken);
+    final normalizedId = _requiredVendorId(vendorId);
+
+    // Fetch profile from vendors then artisans.
+    Map<String, dynamic> profile = {};
+    for (final collection in const <String>['vendors', 'artisans']) {
+      final doc = await _firestoreClient.getDocument(
+        collectionPath: collection,
+        documentId: normalizedId,
+        idToken: idToken,
+      );
+      if (doc != null) {
+        profile = <String, dynamic>{...doc, ...profile};
+        break;
+      }
+    }
+    // Also merge users doc for any extra fields.
+    final usersDoc = await _firestoreClient.getDocument(
+      collectionPath: 'users',
+      documentId: normalizedId,
+      idToken: idToken,
+    );
+    if (usersDoc != null) {
+      profile = <String, dynamic>{...usersDoc, ...profile};
+    }
+
+    // Posts.
+    final postsPage = await _firestoreClient.listDocumentsPage(
+      collectionPath: 'posts',
+      idToken: idToken,
+      pageSize: 20,
+      orderBy: 'timestamp desc',
+    );
+    final posts = postsPage.documents
+        .where((d) => '${d['artisanId'] ?? ''}'.trim() == normalizedId)
+        .take(20)
+        .toList();
+
+    // Reviews.
+    String? reviewCollection;
+    for (final c in const <String>['vendors', 'artisans']) {
+      final doc = await _firestoreClient.getDocument(
+        collectionPath: c,
+        documentId: normalizedId,
+        idToken: idToken,
+      );
+      if (doc != null) { reviewCollection = c; break; }
+    }
+    List<Map<String, dynamic>> reviews = [];
+    if (reviewCollection != null) {
+      final reviewsPage = await _firestoreClient.listDocumentsPage(
+        collectionPath: '$reviewCollection/$normalizedId/reviews',
+        idToken: idToken,
+        pageSize: 20,
+        orderBy: 'createdAt desc',
+      );
+      reviews = reviewsPage.documents;
+    }
+
+    // Portfolio.
+    final portfolioResult = await listVendorPortfolio(
+      idToken: idToken,
+      vendorId: normalizedId,
+      limit: 20,
+    );
+
+    // Jobs.
+    final jobsPage = await _firestoreClient.listDocumentsPage(
+      collectionPath: 'job_posts',
+      idToken: idToken,
+      pageSize: 20,
+      orderBy: 'createdAt desc',
+    );
+    final jobs = jobsPage.documents
+        .where((d) =>
+            '${d['artisanId'] ?? d['vendorId'] ?? ''}'.trim() == normalizedId)
+        .take(20)
+        .toList();
+
+    // Followers count.
+    final followersPage = await _firestoreClient.listDocumentsPage(
+      collectionPath: 'vendors/$normalizedId/followers',
+      idToken: idToken,
+      pageSize: 100,
+    );
+    final followersCount = followersPage.documents.length;
+
+    return <String, dynamic>{
+      'profile': <String, dynamic>{
+        ...profile,
+        'vendorId': normalizedId,
+        'rating': _asDouble(profile['rating']) ?? 0.0,
+        'ratingQuality': _asDouble(profile['ratingQuality']) ?? 0.0,
+        'ratingComm': _asDouble(profile['ratingComm']) ?? 0.0,
+        'ratingTimeliness': _asDouble(profile['ratingTimeliness']) ?? 0.0,
+        'ratingValue': _asDouble(profile['ratingValue']) ?? 0.0,
+        'reviewCount': _asInt(profile['reviewCount']) ?? reviews.length,
+        'followersCount': followersCount,
+        'isVerified': profile['isVerified'] == true,
+      },
+      'posts': posts,
+      'portfolio': portfolioResult['items'] ?? [],
+      'reviews': reviews,
+      'jobs': jobs,
+    };
+  }
+
   Future<Map<String, dynamic>> listVendorWorkfeeds({
     required String idToken,
     required String vendorId,

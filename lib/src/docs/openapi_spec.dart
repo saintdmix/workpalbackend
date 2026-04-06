@@ -156,6 +156,24 @@ Map<String, dynamic> buildOpenApiSpec({
           requiresAuth: false,
         ),
       },
+      '/profile/app_token': <String, dynamic>{
+        'patch': _operation(
+          summary: 'Update FCM app token for push notifications',
+          tag: 'Profile',
+          requestBodyDescription: 'App token payload.',
+          requestBodySchema: _objectSchema(
+            properties: <String, dynamic>{
+              'appToken': _stringSchema(description: 'Firebase FCM device token.'),
+              'platform': _stringSchema(description: 'Device platform: android, ios, web.'),
+            },
+            required: const <String>['appToken'],
+          ),
+          requestBodyExample: <String, dynamic>{
+            'appToken': 'fcm_token_abc123',
+            'platform': 'android',
+          },
+        ),
+      },
       '/profile': <String, dynamic>{
         'get': _operation(
           summary: 'Get profile',
@@ -567,6 +585,23 @@ Map<String, dynamic> buildOpenApiSpec({
           summary: 'Toggle post like',
           tag: 'Workfeed Engagement',
           parameters: <Map<String, dynamic>>[_pathParam(name: 'post_id')],
+        ),
+      },
+      '/workfeeds/{post_id}/interact': <String, dynamic>{
+        'post': _operation(
+          summary: 'Track post interaction (view, tap, profile visit)',
+          tag: 'Workfeed Engagement',
+          parameters: <Map<String, dynamic>>[_pathParam(name: 'post_id')],
+          requestBodyDescription: 'Interaction event payload.',
+          requestBodySchema: _objectSchema(
+            properties: <String, dynamic>{
+              'type': _stringSchema(
+                description: 'Interaction type: `view`, `tap`, or `profile_visit`.',
+              ),
+            },
+            required: const <String>['type'],
+          ),
+          requestBodyExample: <String, dynamic>{'type': 'view'},
         ),
       },
       '/workfeeds/{post_id}/report': <String, dynamic>{
@@ -1489,6 +1524,57 @@ Map<String, dynamic> buildOpenApiSpec({
           ],
         ),
       },
+      '/vendors/{vendor_id}/full': <String, dynamic>{
+        'get': _operation(
+          summary: 'Get full vendor profile — profile, posts, portfolio, reviews, jobs, followers',
+          tag: 'Vendors',
+          parameters: <Map<String, dynamic>>[
+            _pathParam(name: 'vendor_id'),
+          ],
+          successResponseSchema: <String, dynamic>{
+            'type': 'object',
+            'properties': <String, dynamic>{
+              'profile': <String, dynamic>{
+                'type': 'object',
+                'properties': <String, dynamic>{
+                  'vendorId': <String, dynamic>{'type': 'string'},
+                  'name': <String, dynamic>{'type': 'string'},
+                  'username': <String, dynamic>{'type': 'string'},
+                  'title': <String, dynamic>{'type': 'string'},
+                  'bio': <String, dynamic>{'type': 'string'},
+                  'profileImage': <String, dynamic>{'type': 'string'},
+                  'coverImage': <String, dynamic>{'type': 'string'},
+                  'rating': <String, dynamic>{'type': 'number'},
+                  'ratingQuality': <String, dynamic>{'type': 'number'},
+                  'ratingComm': <String, dynamic>{'type': 'number'},
+                  'ratingTimeliness': <String, dynamic>{'type': 'number'},
+                  'ratingValue': <String, dynamic>{'type': 'number'},
+                  'reviewCount': <String, dynamic>{'type': 'integer'},
+                  'followersCount': <String, dynamic>{'type': 'integer'},
+                  'isVerified': <String, dynamic>{'type': 'boolean'},
+                },
+                'additionalProperties': true,
+              },
+              'posts': <String, dynamic>{
+                'type': 'array',
+                'items': <String, dynamic>{'type': 'object', 'additionalProperties': true},
+              },
+              'portfolio': <String, dynamic>{
+                'type': 'array',
+                'items': <String, dynamic>{'type': 'object', 'additionalProperties': true},
+              },
+              'reviews': <String, dynamic>{
+                'type': 'array',
+                'items': <String, dynamic>{'type': 'object', 'additionalProperties': true},
+              },
+              'jobs': <String, dynamic>{
+                'type': 'array',
+                'items': <String, dynamic>{'type': 'object', 'additionalProperties': true},
+              },
+            },
+          },
+        ),
+      },
       '/vendors/{vendor_id}/reviews': <String, dynamic>{
         'get': _operation(
           summary: 'Get vendor reviews',
@@ -1517,6 +1603,63 @@ Map<String, dynamic> buildOpenApiSpec({
               name: 'pageToken',
               description: 'Pagination cursor token.',
             ),
+          ],
+        ),
+      },
+      '/relationships/following': <String, dynamic>{
+        'get': _operation(
+          summary: 'List vendors/artisans the caller is following',
+          tag: 'Relationships',
+          parameters: <Map<String, dynamic>>[
+            _queryParam(
+              name: 'role',
+              description: 'Role hint: customer|vendor|artisan.',
+            ),
+            _queryParam(name: 'limit', description: 'Max number of results.'),
+          ],
+        ),
+      },
+      '/relationships/vendors/{vendor_id}': <String, dynamic>{
+        'get': _operation(
+          summary: 'Get follow relationship with a vendor/artisan',
+          tag: 'Relationships',
+          parameters: <Map<String, dynamic>>[
+            _pathParam(name: 'vendor_id'),
+            _queryParam(
+              name: 'role',
+              description: 'Role hint: customer|vendor|artisan.',
+            ),
+          ],
+        ),
+        'post': _operation(
+          summary: 'Follow or unfollow a vendor/artisan',
+          tag: 'Relationships',
+          parameters: <Map<String, dynamic>>[
+            _pathParam(name: 'vendor_id'),
+            _queryParam(
+              name: 'role',
+              description: 'Role hint: customer|vendor|artisan.',
+            ),
+          ],
+          requestBodyDescription: 'Follow toggle payload.',
+          requestBodySchema: _objectSchema(
+            properties: <String, dynamic>{
+              'follow': <String, dynamic>{
+                'type': 'boolean',
+                'description': 'true to follow, false to unfollow. Omit to toggle.',
+              },
+            },
+          ),
+          requestBodyExample: <String, dynamic>{'follow': true},
+        ),
+      },
+      '/relationships/vendors/{vendor_id}/followers': <String, dynamic>{
+        'get': _operation(
+          summary: 'List followers of a vendor/artisan',
+          tag: 'Relationships',
+          parameters: <Map<String, dynamic>>[
+            _pathParam(name: 'vendor_id'),
+            _queryParam(name: 'limit', description: 'Max number of followers.'),
           ],
         ),
       },

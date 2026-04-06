@@ -162,6 +162,16 @@ class AuthService {
       idToken: idToken,
     );
 
+    // For artisans, also check the vendors collection as some profiles live there.
+    Map<String, dynamic>? vendorProfile;
+    if (role == 'artisan') {
+      vendorProfile = await _firestoreClient.getDocument(
+        collectionPath: 'vendors',
+        documentId: uid,
+        idToken: idToken,
+      );
+    }
+
     // Fetch the legacy consolidated profile if it exists so we don't lose data.
     final legacyProfile = await _firestoreClient.getDocument(
       collectionPath: 'users',
@@ -172,9 +182,11 @@ class AuthService {
     final now = DateTime.now().toUtc().toIso8601String();
 
     // Merge role profile and legacy data (favor non-empty values from either).
+    // For artisans: vendors > artisans > users (most specific wins).
     final profile = _mergeProfiles(
-      primary: roleProfile,
-      secondary: legacyProfile,
+      primary: vendorProfile ?? roleProfile,
+      secondary: vendorProfile != null ? roleProfile : legacyProfile,
+      tertiary: vendorProfile != null ? legacyProfile : null,
       uid: uid,
       email: email,
       role: role,
@@ -234,12 +246,14 @@ class AuthService {
   Map<String, dynamic> _mergeProfiles({
     required Map<String, dynamic>? primary,
     required Map<String, dynamic>? secondary,
+    Map<String, dynamic>? tertiary,
     required String uid,
     required String email,
     required String role,
     required String now,
   }) {
     final merged = <String, dynamic>{
+      if (tertiary != null) ...tertiary,
       if (secondary != null) ...secondary,
       if (primary != null) ...primary,
     };

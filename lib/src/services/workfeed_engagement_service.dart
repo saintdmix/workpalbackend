@@ -81,8 +81,6 @@ class WorkfeedEngagementService {
     }
 
     final safeLimit = limit.clamp(1, 300).toInt();
-    // Comments are stored in a nested collection:
-    // posts/{postId}/comments.
     final comments = await _firestoreClient.listDocuments(
       collectionPath: 'posts/$normalizedPostId/comments',
       idToken: idToken,
@@ -91,11 +89,63 @@ class WorkfeedEngagementService {
     );
 
     final requestedParent = parentCommentId?.trim();
-    return comments.where((comment) {
+    final filtered = comments.where((comment) {
       final parent = '${comment['parentCommentId'] ?? ''}'.trim();
       if (requestedParent == null) return parent.isEmpty;
       if (requestedParent.isEmpty) return parent.isEmpty;
       return parent == requestedParent;
+    }).toList();
+
+    return _enrichCommentsWithProfiles(
+      comments: filtered,
+      idToken: idToken,
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> _enrichCommentsWithProfiles({
+    required List<Map<String, dynamic>> comments,
+    required String idToken,
+  }) async {
+    final uniqueIds = comments
+        .map((c) => '${c['userId'] ?? ''}'.trim())
+        .where((id) => id.isNotEmpty)
+        .toSet();
+
+    final profileMap = <String, Map<String, dynamic>>{};
+    for (final uid in uniqueIds) {
+      for (final collection in const <String>[
+        'artisans',
+        'vendors',
+        'customers',
+      ]) {
+        final doc = await _firestoreClient.getDocument(
+          collectionPath: collection,
+          documentId: uid,
+          idToken: idToken,
+        );
+        if (doc != null) {
+          profileMap[uid] = doc;
+          break;
+        }
+      }
+    }
+
+    return comments.map((comment) {
+      final uid = '${comment['userId'] ?? ''}'.trim();
+      final profile = profileMap[uid] ?? const <String, dynamic>{};
+      return <String, dynamic>{
+        ...comment,
+        'commenterName': comment['commenterName'] ??
+            profile['name'] ??
+            profile['username'] ??
+            profile['displayName'] ??
+            '',
+        'commenterImage': comment['commenterImage'] ??
+            profile['profileImageUrl'] ??
+            profile['imageUrl'] ??
+            profile['profileImage'] ??
+            '',
+      };
     }).toList();
   }
 
@@ -114,12 +164,36 @@ class WorkfeedEngagementService {
     final parentCommentId = _optionalString(payload, 'parentCommentId');
     final now = DateTime.now().toUtc().toIso8601String();
 
+    // Fetch commenter profile to embed name and image.
+    Map<String, dynamic> commenterProfile = const <String, dynamic>{};
+    for (final collection in const <String>['artisans', 'vendors', 'customers']) {
+      final doc = await _firestoreClient.getDocument(
+        collectionPath: collection,
+        documentId: uid,
+        idToken: idToken,
+      );
+      if (doc != null) {
+        commenterProfile = doc;
+        break;
+      }
+    }
+    final commenterName = _optionalString(commenterProfile, 'name') ??
+        _optionalString(commenterProfile, 'username') ??
+        _optionalString(commenterProfile, 'displayName') ??
+        '';
+    final commenterImage = _optionalString(commenterProfile, 'profileImageUrl') ??
+        _optionalString(commenterProfile, 'imageUrl') ??
+        _optionalString(commenterProfile, 'profileImage') ??
+        '';
+
     final created = await _firestoreClient.createDocument(
       collectionPath: 'posts/$normalizedPostId/comments',
       idToken: idToken,
       data: <String, dynamic>{
         'postId': normalizedPostId,
         'userId': uid,
+        'commenterName': commenterName,
+        'commenterImage': commenterImage,
         'text': text,
         'timestamp': now,
         'likes': <dynamic>[],
@@ -203,6 +277,71 @@ class WorkfeedEngagementService {
       'liked': !wasLiked,
       'likeCount': likes.length,
       'likes': likes,
+    };
+  }
+
+  Future<Map<String, dynamic>> trackInteraction({
+    required String idToken,
+    required String postId,
+    required Map<String, dynamic> payload,
+  }) async {
+    final uid = await _resolveUid(idToken);
+    final normalizedPostId = postId.trim();
+    if (normalizedPostId.isEmpty) {
+      throw ApiException.badRequest('post_id is required.');
+    }
+
+    final type = '${payload['type'] ?? ''}'.trim().toLowerCase();
+    if (!const <String>{'view', 'tap', 'profile_visit'}.contains(type)) {
+      throw ApiException.badRequest(
+        'type must be one of: view, tap, profile_visit.',
+      );
+    }
+
+    final post = await _firestoreClient.getDocument(
+      collectionPath: 'posts',
+      documentId: normalizedPostId,
+      idToken: idToken,
+    );
+    if (post == null) {
+      throw ApiException.notFound('Workfeed post not found.');
+    }
+
+    final now = DateTime.now().toUtc().toIso8601String();
+    final countKey = type == 'view'
+        ? 'views'
+        : type == 'tap'
+            ? 'taps'
+            : 'profileVisits';
+    final currentCount = (post[countKey] as num?)?.toInt() ?? 0;
+
+    await _firestoreClient.setDocument(
+      collectionPath: 'posts',
+      documentId: normalizedPostId,
+      idToken: idToken,
+      data: <String, dynamic>{
+        ...post,
+        countKey: currentCount + 1,
+        'updatedAt': now,
+      },
+    );
+
+    await _firestoreClient.createDocument(
+      collectionPath: 'post_interactions',
+      idToken: idToken,
+      data: <String, dynamic>{
+        'postId': normalizedPostId,
+        'userId': uid,
+        'type': type,
+        'timestamp': now,
+        'artisanId': '${post['artisanId'] ?? ''}',
+      },
+    );
+
+    return <String, dynamic>{
+      'postId': normalizedPostId,
+      'type': type,
+      countKey: currentCount + 1,
     };
   }
 

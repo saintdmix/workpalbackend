@@ -40,6 +40,16 @@ class ProfileService {
       idToken: idToken,
     );
 
+    // For artisans, also check vendors collection as profiles may live there.
+    Map<String, dynamic>? vendorProfile;
+    if (normalizedRole == 'artisan') {
+      vendorProfile = await _firestoreClient.getDocument(
+        collectionPath: 'vendors',
+        documentId: uid,
+        idToken: idToken,
+      );
+    }
+
     // Also pull the consolidated user document to avoid returning an incomplete profile.
     final legacyProfile = await _firestoreClient.getDocument(
       collectionPath: 'users',
@@ -51,17 +61,18 @@ class ProfileService {
     final merged = <String, dynamic>{
       if (legacyProfile != null) ...legacyProfile,
       if (roleProfile != null) ...roleProfile,
+      if (vendorProfile != null) ...vendorProfile,
       'uid': uid,
       'email': email,
       'role': normalizedRole,
-      'createdAt': (roleProfile ?? legacyProfile)?['createdAt'] ?? now,
+      'createdAt': (vendorProfile ?? roleProfile ?? legacyProfile)?['createdAt'] ?? now,
       'updatedAt': now,
-      'rating': _asDouble((roleProfile ?? legacyProfile)?['rating']) ?? 0.0,
-      'ratingQuality': _asDouble((roleProfile ?? legacyProfile)?['ratingQuality']) ?? 0.0,
-      'ratingComm': _asDouble((roleProfile ?? legacyProfile)?['ratingComm']) ?? 0.0,
-      'ratingTimeliness': _asDouble((roleProfile ?? legacyProfile)?['ratingTimeliness']) ?? 0.0,
-      'ratingValue': _asDouble((roleProfile ?? legacyProfile)?['ratingValue']) ?? 0.0,
-      'reviewCount': _asInt((roleProfile ?? legacyProfile)?['reviewCount']) ?? 0,
+      'rating': _asDouble((vendorProfile ?? roleProfile ?? legacyProfile)?['rating']) ?? 0.0,
+      'ratingQuality': _asDouble((vendorProfile ?? roleProfile ?? legacyProfile)?['ratingQuality']) ?? 0.0,
+      'ratingComm': _asDouble((vendorProfile ?? roleProfile ?? legacyProfile)?['ratingComm']) ?? 0.0,
+      'ratingTimeliness': _asDouble((vendorProfile ?? roleProfile ?? legacyProfile)?['ratingTimeliness']) ?? 0.0,
+      'ratingValue': _asDouble((vendorProfile ?? roleProfile ?? legacyProfile)?['ratingValue']) ?? 0.0,
+      'reviewCount': _asInt((vendorProfile ?? roleProfile ?? legacyProfile)?['reviewCount']) ?? 0,
     };
 
     // Persist the merged profile so subsequent reads stay consistent.

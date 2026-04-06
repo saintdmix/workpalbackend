@@ -23,6 +23,62 @@ class NotificationService {
   final FirestoreRestClient _firestoreClient;
   final Random _random = Random();
 
+  Future<Map<String, dynamic>> updateAppToken({
+    required String idToken,
+    required Map<String, dynamic> payload,
+  }) async {
+    final user = await _authClient.lookup(idToken: idToken);
+    final uid = '${user['localId'] ?? ''}'.trim();
+    if (uid.isEmpty) {
+      throw ApiException.unauthorized('Invalid or expired user token.');
+    }
+
+    final appToken = payload['appToken']?.toString().trim() ?? '';
+    if (appToken.isEmpty) {
+      throw ApiException.badRequest('appToken is required.');
+    }
+
+    final now = DateTime.now().toUtc().toIso8601String();
+    final tokenData = <String, dynamic>{
+      'uid': uid,
+      'appToken': appToken,
+      'platform': payload['platform']?.toString().trim() ?? '',
+      'updatedAt': now,
+    };
+
+    // Write to all possible profile collections so the token is always findable.
+    for (final collection in const <String>[
+      'artisans',
+      'vendors',
+      'customers',
+      'users',
+    ]) {
+      final doc = await _firestoreClient.getDocument(
+        collectionPath: collection,
+        documentId: uid,
+        idToken: idToken,
+      );
+      if (doc != null) {
+        await _firestoreClient.setDocument(
+          collectionPath: collection,
+          documentId: uid,
+          idToken: idToken,
+          data: <String, dynamic>{...doc, 'appToken': appToken, 'updatedAt': now},
+        );
+      }
+    }
+
+    // Also store in a dedicated tokens collection for easy FCM lookup.
+    await _firestoreClient.setDocument(
+      collectionPath: 'app_tokens',
+      documentId: uid,
+      idToken: idToken,
+      data: tokenData,
+    );
+
+    return <String, dynamic>{'uid': uid, 'appToken': appToken, 'updatedAt': now};
+  }
+
   Future<List<Map<String, dynamic>>> listNotifications({
     required String role,
     required String idToken,
