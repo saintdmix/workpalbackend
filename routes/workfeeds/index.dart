@@ -22,8 +22,10 @@ Future<Response> onRequest(RequestContext context) async {
       final feed = request.uri.queryParameters['feed'];
       final following = _parseBool(request.uri.queryParameters['following']);
       final pageToken = request.uri.queryParameters['pageToken'];
-      final latitude =
-          _parseDoubleParam(request.uri.queryParameters['latitude'], 'latitude');
+      final latitude = _parseDoubleParam(
+        request.uri.queryParameters['latitude'],
+        'latitude',
+      );
       final longitude = _parseDoubleParam(
         request.uri.queryParameters['longitude'],
         'longitude',
@@ -47,10 +49,13 @@ Future<Response> onRequest(RequestContext context) async {
         latitude: latitude,
         longitude: longitude,
       );
-      return Response.json(body: {
-        'items': result.items,
-        if (result.nextPageToken != null) 'nextPageToken': result.nextPageToken,
-      });
+      return Response.json(
+        body: {
+          'items': result.items,
+          if (result.nextPageToken != null)
+            'nextPageToken': result.nextPageToken,
+        },
+      );
     }
 
     final body = await request.json();
