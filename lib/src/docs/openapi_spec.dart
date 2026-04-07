@@ -550,6 +550,10 @@ Map<String, dynamic> buildOpenApiSpec({
                 'type': 'boolean',
                 'description': 'Mark post as an admin post. Defaults to false.',
               },
+              'thumbnailUrl': _stringSchema(
+                description:
+                    'Thumbnail image URL for video posts. Shown as preview before video loads.',
+              ),
               'latitude': <String, dynamic>{'type': 'number'},
               'longitude': <String, dynamic>{'type': 'number'},
               'mirrorToStories': <String, dynamic>{'type': 'boolean'},
@@ -559,6 +563,7 @@ Map<String, dynamic> buildOpenApiSpec({
           requestBodyExample: <String, dynamic>{
             'content': 'New post from my workshop',
             'imageUrl': <String>['https://cdn.example.com/work-1.jpg'],
+            'thumbnailUrl': 'https://cdn.example.com/work-1-thumb.jpg',
             'isAdminPost': false,
             'latitude': 6.5244,
             'longitude': 3.3792,
@@ -1167,12 +1172,20 @@ Map<String, dynamic> buildOpenApiSpec({
               'address': _stringSchema(),
               'location': <String, dynamic>{
                 'type': 'object',
-                'additionalProperties': true,
+                'properties': <String, dynamic>{
+                  'latitude': <String, dynamic>{'type': 'number'},
+                  'longitude': <String, dynamic>{'type': 'number'},
+                },
               },
               'latitude': <String, dynamic>{'type': 'number'},
               'longitude': <String, dynamic>{'type': 'number'},
-              'startDate': _stringSchema(),
-              'endDate': _stringSchema(),
+              'startDate': _stringSchema(description: 'ISO date string.'),
+              'endDate': _stringSchema(description: 'ISO date string.'),
+              'projectImageUrls': <String, dynamic>{
+                'type': 'array',
+                'items': <String, dynamic>{'type': 'string'},
+                'description': 'Alias for refImages — project reference images.',
+              },
               'refImages': <String, dynamic>{
                 'type': 'array',
                 'items': <String, dynamic>{'type': 'string'},
@@ -1199,6 +1212,19 @@ Map<String, dynamic> buildOpenApiSpec({
             'isUrgent': true,
             'isRemote': false,
             'address': 'Lekki, Lagos',
+            'location': <String, dynamic>{
+              'latitude': 6.4281,
+              'longitude': 3.4219,
+            },
+            'latitude': 6.4281,
+            'longitude': 3.4219,
+            'startDate': '2026-05-01',
+            'endDate': '2026-05-15',
+            'projectImageUrls': <String>[
+              'https://cdn.example.com/ref1.jpg',
+              'https://cdn.example.com/ref2.jpg',
+            ],
+            'requirements': <String>['5 years experience', 'Own tools'],
           },
           successCode: 201,
           successDescription: 'Job post created.',

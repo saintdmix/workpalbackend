@@ -195,6 +195,7 @@ class WorkfeedService {
     final latitude = _optionalNum(payload, 'latitude');
     final longitude = _optionalNum(payload, 'longitude');
     final isAdminPost = payload['isAdminPost'] == true;
+    final thumbnailUrl = _optionalString(payload, 'thumbnailUrl') ?? '';
 
     final postData = <String, dynamic>{
       'artisanId': uid,
@@ -203,6 +204,7 @@ class WorkfeedService {
       'timestamp': nowIso,
       'likes': <dynamic>[],
       'isAdminPost': isAdminPost,
+      if (thumbnailUrl.isNotEmpty) 'thumbnailUrl': thumbnailUrl,
       if (latitude != null) 'latitude': latitude,
       if (longitude != null) 'longitude': longitude,
       ..._additionalPostFields(payload),
@@ -228,6 +230,7 @@ class WorkfeedService {
           'timestamp': nowIso,
           'expiresAt': now.add(const Duration(days: 2)).toIso8601String(),
           'isAdminPost': isAdminPost,
+          if (thumbnailUrl.isNotEmpty) 'thumbnailUrl': thumbnailUrl,
           if (latitude != null) 'latitude': latitude,
           if (longitude != null) 'longitude': longitude,
         },
@@ -342,6 +345,7 @@ class WorkfeedService {
       'caption',
       'imageUrl',
       'mediaUrls',
+      'thumbnailUrl',
       'timestamp',
       'likes',
       'isAdminPost',

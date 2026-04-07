@@ -171,7 +171,7 @@ class HiringService {
       'startDate':
           _parseDateTime(payload['startDate'])?.toUtc().toIso8601String(),
       'endDate': _parseDateTime(payload['endDate'])?.toUtc().toIso8601String(),
-      'refImages': _readStringList(payload['refImages']),
+      'refImages': _readStringList(payload['projectImageUrls'] ?? payload['refImages']),
       'mediaImages': _readStringList(payload['mediaImages']),
       'requirements': _readStringList(payload['requirements']),
       'applicants': _readStringList(payload['applicants']),
