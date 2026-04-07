@@ -133,11 +133,15 @@ class HiringService {
       );
     }
 
-    final profile = await _requireProfile(
+    final profile = await _firestoreClient.getDocument(
       collectionPath: 'customers',
-      userId: actor.uid,
+      documentId: actor.uid,
       idToken: idToken,
-    );
+    ) ?? await _firestoreClient.getDocument(
+      collectionPath: 'users',
+      documentId: actor.uid,
+      idToken: idToken,
+    ) ?? <String, dynamic>{};
 
     final nowIso = _nowIso();
     final nowMs = DateTime.now().millisecondsSinceEpoch;
