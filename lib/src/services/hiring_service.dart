@@ -202,6 +202,23 @@ class HiringService {
       data: data,
     );
 
+    // Mirror to posts collection so the job appears in the workfeed.
+    await _firestoreClient.setDocument(
+      collectionPath: 'posts',
+      documentId: jobId,
+      idToken: idToken,
+      data: <String, dynamic>{
+        ...data,
+        'type': 'job',
+        'artisanId': uid,
+        'content': data['description'] ?? data['title'] ?? '',
+        'imageUrl': data['refImages'] ?? <String>[],
+        'likes': <dynamic>[],
+        'isAdminPost': false,
+        'timestamp': nowIso,
+      },
+    );
+
     return <String, dynamic>{'id': jobId, ...data};
   }
 
