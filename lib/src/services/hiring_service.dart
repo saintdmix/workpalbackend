@@ -118,30 +118,26 @@ class HiringService {
     String? role,
     required Map<String, dynamic> payload,
   }) async {
-    final actor = await _resolveActor(idToken: idToken, roleHint: role);
-    if (!actor.isCustomer) {
-      throw ApiException.forbidden('Only customers can post jobs.');
-    }
+    // Resolve uid directly — don't require a specific collection profile.
+    final uid = await _resolveUid(idToken);
 
     final title = _requiredString(payload, 'title');
     final category = _requiredString(payload, 'category');
     final isRemote = _asBool(payload['isRemote']) ?? false;
     final address = _optionalString(payload, 'address') ?? '';
-    if (!isRemote && address.isEmpty) {
-      throw ApiException.badRequest(
-        'address is required when isRemote is false.',
-      );
-    }
 
-    final profile = await _firestoreClient.getDocument(
-      collectionPath: 'customers',
-      documentId: actor.uid,
-      idToken: idToken,
-    ) ?? await _firestoreClient.getDocument(
-      collectionPath: 'users',
-      documentId: actor.uid,
-      idToken: idToken,
-    ) ?? <String, dynamic>{};
+    // Fetch profile from any collection for customerName/customerImage.
+    Map<String, dynamic> profile = const <String, dynamic>{};
+    for (final collection in const <String>[
+      'customers', 'vendors', 'artisans', 'users',
+    ]) {
+      final doc = await _firestoreClient.getDocument(
+        collectionPath: collection,
+        documentId: uid,
+        idToken: idToken,
+      );
+      if (doc != null) { profile = doc; break; }
+    }
 
     final nowIso = _nowIso();
     final nowMs = DateTime.now().millisecondsSinceEpoch;
@@ -158,7 +154,7 @@ class HiringService {
 
     final data = <String, dynamic>{
       'jobId': jobId,
-      'customerId': actor.uid,
+      'customerId': uid,
       'customerName': _customerName(profile),
       'customerImage': _profileImage(profile),
       'title': title,
@@ -963,14 +959,11 @@ class HiringService {
         documentId: uid,
         idToken: idToken,
       );
-      if (artisan == null) {
-        throw ApiException.notFound('Vendor profile not found.');
-      }
       return _ActorContext(
         uid: uid,
-        role: 'artisan',
-        collection: 'artisans',
-        profile: artisan,
+        role: artisan != null ? 'artisan' : hint,
+        collection: artisan != null ? 'artisans' : 'users',
+        profile: artisan ?? const <String, dynamic>{},
       );
     }
 
@@ -994,7 +987,18 @@ class HiringService {
       }
     }
 
-    throw ApiException.notFound('User profile not found.');
+    // Fall back to users collection.
+    final usersDoc = await _firestoreClient.getDocument(
+      collectionPath: 'users',
+      documentId: uid,
+      idToken: idToken,
+    );
+    return _ActorContext(
+      uid: uid,
+      role: hint ?? 'customer',
+      collection: 'users',
+      profile: usersDoc ?? const <String, dynamic>{},
+    );
   }
 
   Future<String> _resolveUid(String idToken) async {

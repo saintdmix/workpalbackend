@@ -27,11 +27,25 @@ class FirestoreRestClient {
       collection: collection,
       collectionPath: collectionPath,
     );
-    final response = await _http.patch(
-      _documentUri(collectionPath: targetCollection, documentId: documentId),
-      headers: _headers(idToken),
-      body: jsonEncode({'fields': _toFirestoreFields(data)}),
+    final uri = _documentUri(
+      collectionPath: targetCollection,
+      documentId: documentId,
     );
+    final body = jsonEncode({'fields': _toFirestoreFields(data)});
+    final headers = _headers(idToken);
+
+    // Try PATCH first (update). If 404, the document doesn't exist yet — use POST to create it.
+    var response = await _http.patch(uri, headers: headers, body: body);
+    if (response.statusCode == 404) {
+      response = await _http.post(
+        _collectionUri(
+          collectionPath: targetCollection,
+          documentId: documentId,
+        ),
+        headers: headers,
+        body: body,
+      );
+    }
 
     if (response.statusCode >= 400) {
       throw ApiException.server(_readFirebaseError(response.body));
