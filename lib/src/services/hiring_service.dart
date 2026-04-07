@@ -978,7 +978,7 @@ class HiringService {
       );
       return _ActorContext(
         uid: uid,
-        role: artisan != null ? 'artisan' : hint,
+        role: artisan != null ? 'artisan' : (hint ?? 'vendor'),
         collection: artisan != null ? 'artisans' : 'users',
         profile: artisan ?? const <String, dynamic>{},
       );
