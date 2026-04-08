@@ -1,7 +1,7 @@
 {
   "build": {
     "builder": "NIXPACKS",
-    "buildCommand": "dart pub get && dart compile exe bin/server.dart -o server"
+    "buildCommand": "dart pub get && dart pub global activate dart_frog_cli && dart pub global run dart_frog_cli:dart_frog build && dart compile exe build/bin/server.dart -o server"
   },
   "start": {
     "cmd": "./server"
