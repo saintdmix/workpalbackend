@@ -42,7 +42,11 @@ class FirebaseStorageRestClient {
     );
 
     if (response.statusCode >= 400) {
-      throw ApiException.server(_readStorageError(response.body));
+      final detail = _readStorageError(response.body);
+      throw ApiException.server(
+        'Firebase Storage upload failed '
+        '(HTTP ${response.statusCode}, bucket=$_storageBucket): $detail',
+      );
     }
 
     final body = _decodeObject(response.body);

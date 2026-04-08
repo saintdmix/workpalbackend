@@ -1,4 +1,6 @@
 // Place in: lib/src/config/env.dart
+import 'dart:io';
+
 import 'package:dotenv/dotenv.dart';
 
 class AppEnv {
@@ -13,10 +15,15 @@ class AppEnv {
     final raw = _dotenv['FIREBASE_STORAGE_BUCKET']?.trim();
     if (raw != null && raw.isNotEmpty) return raw;
 
-    // Fallback to the default Firebase bucket naming convention.
+    // Fallback: modern Firebase projects use .firebasestorage.app
     final projectId = _dotenv['FIREBASE_PROJECT_ID']?.trim();
     if (projectId != null && projectId.isNotEmpty) {
-      return '$projectId.appspot.com';
+      final bucket = '$projectId.firebasestorage.app';
+      stderr.writeln(
+        '[env] FIREBASE_STORAGE_BUCKET not set — '
+        'falling back to: $bucket',
+      );
+      return bucket;
     }
 
     throw StateError(

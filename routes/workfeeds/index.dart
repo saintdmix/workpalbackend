@@ -153,10 +153,10 @@ Future<Response> onRequest(RequestContext context) async {
       statusCode: e.statusCode,
       body: {'error': e.message},
     );
-  } catch (_) {
+  } catch (e) {
     return Response.json(
       statusCode: HttpStatus.internalServerError,
-      body: {'error': 'Unexpected server error.'},
+      body: {'error': 'Unexpected server error: $e'},
     );
   }
 }
