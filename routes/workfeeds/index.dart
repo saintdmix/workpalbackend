@@ -1,7 +1,9 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:dart_frog/dart_frog.dart';
 import 'package:workpalbackend/src/exceptions/api_exception.dart';
+import 'package:workpalbackend/src/services/media_upload_service.dart';
 import 'package:workpalbackend/src/services/workfeed_service.dart';
 import 'package:workpalbackend/src/utils/request_auth.dart';
 
@@ -58,14 +60,92 @@ Future<Response> onRequest(RequestContext context) async {
       );
     }
 
-    final body = await request.json();
-    if (body is! Map<String, dynamic>) {
-      throw ApiException.badRequest('Request body must be a JSON object.');
+    final contentType = request.headers[HttpHeaders.contentTypeHeader] ?? '';
+    final Map<String, dynamic> payload;
+
+    if (contentType.contains('multipart/form-data')) {
+      late final FormData formData;
+      try {
+        formData = await request.formData();
+      } catch (_) {
+        throw ApiException.badRequest(
+          'Invalid multipart/form-data. Do not set Content-Type manually; '
+          'let your client include the multipart boundary.',
+        );
+      }
+
+      final fields = <String, dynamic>{};
+      for (final entry in formData.fields.entries) {
+        fields[entry.key] = _coerceFormValue(entry.value);
+      }
+
+      final uploadedMediaUrls = <String>[];
+      String? uploadedThumbnailUrl;
+
+      for (final entry in formData.files.entries) {
+        final key = entry.key.trim();
+        final file = entry.value;
+
+        final bytes = await file.readAsBytes();
+        final mime = file.contentType.mimeType.toLowerCase();
+        final isVideo = mime.startsWith('video/') || _isVideoKey(key);
+
+        if (_isThumbnailKey(key)) {
+          final uploaded = await mediaUploadService.uploadBytesForPath(
+            idToken: idToken,
+            bytes: bytes,
+            folder: 'workfeed_thumbnails',
+            defaultNamePrefix: 'workfeed_thumbnail',
+            fileName: file.name,
+            contentType: file.contentType.mimeType,
+          );
+          final url = '${uploaded['downloadUrl'] ?? ''}'.trim();
+          if (url.isNotEmpty) uploadedThumbnailUrl = url;
+          continue;
+        }
+
+        if (!_isWorkfeedMediaKey(key)) continue;
+
+        final uploaded = await mediaUploadService.uploadBytesForPath(
+          idToken: idToken,
+          bytes: bytes,
+          folder: isVideo ? 'workfeed_videos' : 'workfeed_images',
+          defaultNamePrefix: isVideo ? 'workfeed_video' : 'workfeed_image',
+          fileName: file.name,
+          contentType: file.contentType.mimeType,
+        );
+        final url = '${uploaded['downloadUrl'] ?? ''}'.trim();
+        if (url.isNotEmpty) uploadedMediaUrls.add(url);
+      }
+
+      // Merge uploaded media URLs into `imageUrl` (primary) + `mediaUrls` (alias).
+      if (uploadedMediaUrls.isNotEmpty) {
+        final merged = <String>[
+          ..._readStringList(fields['imageUrl']),
+          ..._readStringList(fields['mediaUrls']),
+          ...uploadedMediaUrls,
+        ];
+        fields['imageUrl'] = merged;
+        fields['mediaUrls'] = merged;
+      }
+
+      // Accept a `thumbnail` file upload, map it to `thumbnailUrl` for the service.
+      if ((uploadedThumbnailUrl ?? '').isNotEmpty) {
+        fields['thumbnailUrl'] = uploadedThumbnailUrl;
+      }
+
+      payload = fields;
+    } else {
+      final body = await request.json();
+      if (body is! Map<String, dynamic>) {
+        throw ApiException.badRequest('Request body must be a JSON object.');
+      }
+      payload = body;
     }
 
     final created = await workfeedService.createWorkfeed(
       idToken: idToken,
-      payload: body,
+      payload: payload,
     );
     return Response.json(statusCode: HttpStatus.created, body: created);
   } on ApiException catch (e) {
@@ -79,6 +159,88 @@ Future<Response> onRequest(RequestContext context) async {
       body: {'error': 'Unexpected server error.'},
     );
   }
+}
+
+dynamic _coerceFormValue(String raw) {
+  final value = raw.trim();
+  if (value.isEmpty) return '';
+
+  if (value == 'true') return true;
+  if (value == 'false') return false;
+
+  if ((value.startsWith('{') && value.endsWith('}')) ||
+      (value.startsWith('[') && value.endsWith(']'))) {
+    try {
+      return jsonDecode(value);
+    } catch (_) {
+      // Fall through.
+    }
+  }
+
+  final asNum = num.tryParse(value);
+  if (asNum != null) return asNum;
+  return raw;
+}
+
+List<String> _readStringList(dynamic value) {
+  if (value is List) {
+    return value.whereType<String>().where((e) => e.trim().isNotEmpty).toList();
+  }
+  if (value is String) {
+    final trimmed = value.trim();
+    if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+      try {
+        final decoded = jsonDecode(trimmed);
+        if (decoded is List) {
+          return decoded
+              .whereType<String>()
+              .where((e) => e.trim().isNotEmpty)
+              .toList();
+        }
+      } catch (_) {
+        // ignore
+      }
+    }
+    if (trimmed.isNotEmpty) return <String>[trimmed];
+  }
+  return const <String>[];
+}
+
+bool _isWorkfeedMediaKey(String key) {
+  final normalized = key.trim().toLowerCase();
+  if (normalized.isEmpty) return false;
+  if (_isThumbnailKey(normalized)) return false;
+
+  return normalized == 'media' ||
+      normalized == 'file' ||
+      normalized == 'files' ||
+      normalized == 'image' ||
+      normalized == 'images' ||
+      normalized == 'video' ||
+      normalized == 'videos' ||
+      normalized == 'imageurl' ||
+      normalized == 'mediaurls' ||
+      normalized.startsWith('media') ||
+      normalized.startsWith('image') ||
+      normalized.startsWith('video');
+}
+
+bool _isVideoKey(String key) {
+  final normalized = key.trim().toLowerCase();
+  return normalized == 'video' ||
+      normalized == 'videos' ||
+      normalized == 'videourl' ||
+      normalized == 'videourls' ||
+      normalized.startsWith('video');
+}
+
+bool _isThumbnailKey(String key) {
+  final normalized = key.trim().toLowerCase();
+  return normalized == 'thumbnail' ||
+      normalized == 'thumb' ||
+      normalized == 'thumbnailurl' ||
+      normalized.startsWith('thumbnail') ||
+      normalized.startsWith('thumb');
 }
 
 bool? _parseBool(String? value) {

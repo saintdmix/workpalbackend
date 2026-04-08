@@ -163,8 +163,12 @@ Map<String, dynamic> buildOpenApiSpec({
           requestBodyDescription: 'App token payload.',
           requestBodySchema: _objectSchema(
             properties: <String, dynamic>{
-              'appToken': _stringSchema(description: 'Firebase FCM device token.'),
-              'platform': _stringSchema(description: 'Device platform: android, ios, web.'),
+              'appToken': _stringSchema(
+                description: 'Firebase FCM device token.',
+              ),
+              'platform': _stringSchema(
+                description: 'Device platform: android, ios, web.',
+              ),
             },
             required: const <String>['appToken'],
           ),
@@ -533,41 +537,105 @@ Map<String, dynamic> buildOpenApiSpec({
         'post': _operation(
           summary: 'Create workfeed post',
           tag: 'Workfeeds',
-          requestBodyDescription: 'Workfeed post payload.',
-          requestBodySchema: _objectSchema(
-            properties: <String, dynamic>{
-              'content': _stringSchema(),
-              'caption': _stringSchema(),
-              'imageUrl': <String, dynamic>{
-                'type': 'array',
-                'items': <String, dynamic>{'type': 'string'},
-              },
-              'mediaUrls': <String, dynamic>{
-                'type': 'array',
-                'items': <String, dynamic>{'type': 'string'},
-              },
-              'isAdminPost': <String, dynamic>{
-                'type': 'boolean',
-                'description': 'Mark post as an admin post. Defaults to false.',
-              },
-              'thumbnailUrl': _stringSchema(
-                description:
-                    'Thumbnail image URL for video posts. Shown as preview before video loads.',
+          requestBodyDescription:
+              'Workfeed post payload. Accepts JSON or multipart/form-data (for image/video uploads).',
+          requestBodyContent: <String, dynamic>{
+            'application/json': <String, dynamic>{
+              'schema': _objectSchema(
+                properties: <String, dynamic>{
+                  'content': _stringSchema(),
+                  'caption': _stringSchema(),
+                  'imageUrl': <String, dynamic>{
+                    'type': 'array',
+                    'items': <String, dynamic>{'type': 'string'},
+                  },
+                  'mediaUrls': <String, dynamic>{
+                    'type': 'array',
+                    'items': <String, dynamic>{'type': 'string'},
+                  },
+                  'isAdminPost': <String, dynamic>{
+                    'type': 'boolean',
+                    'description':
+                        'Mark post as an admin post. Defaults to false.',
+                  },
+                  'thumbnailUrl': _stringSchema(
+                    description:
+                        'Thumbnail image URL for video posts. Shown as preview before video loads.',
+                  ),
+                  'latitude': <String, dynamic>{'type': 'number'},
+                  'longitude': <String, dynamic>{'type': 'number'},
+                  'mirrorToStories': <String, dynamic>{'type': 'boolean'},
+                },
+                additionalProperties: true,
               ),
-              'latitude': <String, dynamic>{'type': 'number'},
-              'longitude': <String, dynamic>{'type': 'number'},
-              'mirrorToStories': <String, dynamic>{'type': 'boolean'},
+              'example': <String, dynamic>{
+                'content': 'New post from my workshop',
+                'imageUrl': <String>['https://cdn.example.com/work-1.jpg'],
+                'thumbnailUrl': 'https://cdn.example.com/work-1-thumb.jpg',
+                'isAdminPost': false,
+                'latitude': 6.5244,
+                'longitude': 3.3792,
+                'mirrorToStories': true,
+              },
             },
-            additionalProperties: true,
-          ),
-          requestBodyExample: <String, dynamic>{
-            'content': 'New post from my workshop',
-            'imageUrl': <String>['https://cdn.example.com/work-1.jpg'],
-            'thumbnailUrl': 'https://cdn.example.com/work-1-thumb.jpg',
-            'isAdminPost': false,
-            'latitude': 6.5244,
-            'longitude': 3.3792,
-            'mirrorToStories': true,
+            'multipart/form-data': <String, dynamic>{
+              'schema': <String, dynamic>{
+                'type': 'object',
+                'properties': <String, dynamic>{
+                  'content': _stringSchema(),
+                  'caption': _stringSchema(),
+                  'isAdminPost': <String, dynamic>{
+                    'type': 'string',
+                    'enum': <String>['true', 'false'],
+                    'description': 'Boolean value.',
+                  },
+                  'mirrorToStories': <String, dynamic>{
+                    'type': 'string',
+                    'enum': <String>['true', 'false'],
+                    'description': 'Boolean value.',
+                  },
+                  'latitude': <String, dynamic>{'type': 'number'},
+                  'longitude': <String, dynamic>{'type': 'number'},
+                  'thumbnail': <String, dynamic>{
+                    'type': 'string',
+                    'format': 'binary',
+                    'description':
+                        'Thumbnail image file to upload; server sets thumbnailUrl.',
+                  },
+                  'thumbnailUrl': _stringSchema(
+                    description:
+                        'Optional thumbnail URL. Server also supports uploading thumbnail as a file.',
+                  ),
+                  'media': <String, dynamic>{
+                    'type': 'array',
+                    'items': <String, dynamic>{
+                      'type': 'string',
+                      'format': 'binary',
+                      'description': 'Image/video file to upload.',
+                    },
+                    'description':
+                        'Upload one or more files. Some clients require unique field names (media1, media2, image1...).',
+                  },
+                  'imageUrl': <String, dynamic>{
+                    'type': 'array',
+                    'items': <String, dynamic>{
+                      'type': 'string',
+                      'format': 'binary',
+                      'description': 'Alias for media.',
+                    },
+                  },
+                  'mediaUrls': <String, dynamic>{
+                    'type': 'array',
+                    'items': <String, dynamic>{
+                      'type': 'string',
+                      'format': 'binary',
+                      'description': 'Alias for media.',
+                    },
+                  },
+                },
+                'additionalProperties': true,
+              },
+            },
           },
           successCode: 201,
           successDescription: 'Post created.',
@@ -601,7 +669,8 @@ Map<String, dynamic> buildOpenApiSpec({
           requestBodySchema: _objectSchema(
             properties: <String, dynamic>{
               'type': _stringSchema(
-                description: 'Interaction type: `view`, `tap`, or `profile_visit`.',
+                description:
+                    'Interaction type: `view`, `tap`, or `profile_visit`.',
               ),
             },
             required: const <String>['type'],
@@ -1168,9 +1237,15 @@ Map<String, dynamic> buildOpenApiSpec({
                   'title': _stringSchema(),
                   'category': _stringSchema(),
                   'description': _stringSchema(),
-                  'customerId': _stringSchema(description: 'Auto-set from token.'),
-                  'customerName': _stringSchema(description: 'Auto-set from profile.'),
-                  'customerImage': _stringSchema(description: 'Auto-set from profile.'),
+                  'customerId': _stringSchema(
+                    description: 'Auto-set from token.',
+                  ),
+                  'customerName': _stringSchema(
+                    description: 'Auto-set from profile.',
+                  ),
+                  'customerImage': _stringSchema(
+                    description: 'Auto-set from profile.',
+                  ),
                   'budgetMin': <String, dynamic>{'type': 'number'},
                   'budgetMax': <String, dynamic>{'type': 'number'},
                   'isUrgent': <String, dynamic>{'type': 'boolean'},
@@ -1248,8 +1323,14 @@ Map<String, dynamic> buildOpenApiSpec({
                   'description': _stringSchema(),
                   'budgetMin': <String, dynamic>{'type': 'number'},
                   'budgetMax': <String, dynamic>{'type': 'number'},
-                  'isUrgent': <String, dynamic>{'type': 'string', 'enum': <String>['true', 'false']},
-                  'isRemote': <String, dynamic>{'type': 'string', 'enum': <String>['true', 'false']},
+                  'isUrgent': <String, dynamic>{
+                    'type': 'string',
+                    'enum': <String>['true', 'false'],
+                  },
+                  'isRemote': <String, dynamic>{
+                    'type': 'string',
+                    'enum': <String>['true', 'false'],
+                  },
                   'address': _stringSchema(),
                   'latitude': <String, dynamic>{'type': 'number'},
                   'longitude': <String, dynamic>{'type': 'number'},
@@ -1389,37 +1470,84 @@ Map<String, dynamic> buildOpenApiSpec({
               description: 'Role hint: customer|vendor|artisan.',
             ),
           ],
-          requestBodyDescription: 'Quote payload.',
-          requestBodySchema: _objectSchema(
-            properties: <String, dynamic>{
-              'otherId': _stringSchema(),
-              'chatRoomId': _stringSchema(),
-              'text': _stringSchema(),
-              'quoteStatus': _stringSchema(),
-              'isNegotiatedQuote': <String, dynamic>{'type': 'boolean'},
-              'imageUrls': <String, dynamic>{
-                'type': 'array',
-                'items': <String, dynamic>{'type': 'string'},
-              },
-              'videoUrls': <String, dynamic>{
-                'type': 'array',
-                'items': <String, dynamic>{'type': 'string'},
-              },
-              'quoteData': <String, dynamic>{
-                'type': 'object',
-                'additionalProperties': true,
+          requestBodyDescription:
+              'Quote payload. Accepts JSON or multipart/form-data (for image uploads).',
+          requestBodyContent: <String, dynamic>{
+            'application/json': <String, dynamic>{
+              'schema': _objectSchema(
+                properties: <String, dynamic>{
+                  'otherId': _stringSchema(),
+                  'chatRoomId': _stringSchema(),
+                  'text': _stringSchema(),
+                  'quoteStatus': _stringSchema(),
+                  'isNegotiatedQuote': <String, dynamic>{'type': 'boolean'},
+                  'imageUrls': <String, dynamic>{
+                    'type': 'array',
+                    'items': <String, dynamic>{'type': 'string'},
+                  },
+                  'videoUrls': <String, dynamic>{
+                    'type': 'array',
+                    'items': <String, dynamic>{'type': 'string'},
+                  },
+                  'quoteData': <String, dynamic>{
+                    'type': 'object',
+                    'additionalProperties': true,
+                  },
+                },
+                required: const <String>['otherId'],
+                additionalProperties: true,
+              ),
+              'example': <String, dynamic>{
+                'otherId': 'uid_customer_001',
+                'chatRoomId': 'uid_customer_001_uid_vendor_001',
+                'quoteData': <String, dynamic>{
+                  'jobId': 'job_123',
+                  'projectName': 'Kitchen cabinet installation',
+                  'total': 200000,
+                },
               },
             },
-            required: const <String>['otherId'],
-            additionalProperties: true,
-          ),
-          requestBodyExample: <String, dynamic>{
-            'otherId': 'uid_customer_001',
-            'chatRoomId': 'uid_customer_001_uid_vendor_001',
-            'quoteData': <String, dynamic>{
-              'jobId': 'job_123',
-              'projectName': 'Kitchen cabinet installation',
-              'total': 200000,
+            'multipart/form-data': <String, dynamic>{
+              'schema': <String, dynamic>{
+                'type': 'object',
+                'properties': <String, dynamic>{
+                  'otherId': _stringSchema(),
+                  'chatRoomId': _stringSchema(),
+                  'text': _stringSchema(),
+                  'quoteStatus': _stringSchema(),
+                  'isNegotiatedQuote': <String, dynamic>{
+                    'type': 'string',
+                    'enum': <String>['true', 'false'],
+                  },
+                  'quoteData': _stringSchema(
+                    description: 'JSON string for quoteData object.',
+                  ),
+                  'image': <String, dynamic>{
+                    'type': 'string',
+                    'format': 'binary',
+                    'description':
+                        'Image file to upload; server appends to imageUrls.',
+                  },
+                  'video': <String, dynamic>{
+                    'type': 'string',
+                    'format': 'binary',
+                    'description':
+                        'Optional video file to upload; server appends to videoUrls.',
+                  },
+                  'imageUrls': <String, dynamic>{
+                    'type': 'array',
+                    'items': <String, dynamic>{'type': 'string'},
+                    'description': 'Optional existing URLs to include.',
+                  },
+                  'videoUrls': <String, dynamic>{
+                    'type': 'array',
+                    'items': <String, dynamic>{'type': 'string'},
+                    'description': 'Optional existing URLs to include.',
+                  },
+                },
+                'required': <String>['otherId'],
+                'additionalProperties': true,
+              },
             },
           },
           successCode: 201,
@@ -1603,7 +1731,8 @@ Map<String, dynamic> buildOpenApiSpec({
       },
       '/vendors/{vendor_id}/full': <String, dynamic>{
         'get': _operation(
-          summary: 'Get full vendor profile — profile, posts, portfolio, reviews, jobs, followers',
+          summary:
+              'Get full vendor profile — profile, posts, portfolio, reviews, jobs, followers',
           tag: 'Vendors',
           parameters: <Map<String, dynamic>>[
             _pathParam(name: 'vendor_id'),
@@ -1634,19 +1763,31 @@ Map<String, dynamic> buildOpenApiSpec({
               },
               'posts': <String, dynamic>{
                 'type': 'array',
-                'items': <String, dynamic>{'type': 'object', 'additionalProperties': true},
+                'items': <String, dynamic>{
+                  'type': 'object',
+                  'additionalProperties': true,
+                },
               },
               'portfolio': <String, dynamic>{
                 'type': 'array',
-                'items': <String, dynamic>{'type': 'object', 'additionalProperties': true},
+                'items': <String, dynamic>{
+                  'type': 'object',
+                  'additionalProperties': true,
+                },
               },
               'reviews': <String, dynamic>{
                 'type': 'array',
-                'items': <String, dynamic>{'type': 'object', 'additionalProperties': true},
+                'items': <String, dynamic>{
+                  'type': 'object',
+                  'additionalProperties': true,
+                },
               },
               'jobs': <String, dynamic>{
                 'type': 'array',
-                'items': <String, dynamic>{'type': 'object', 'additionalProperties': true},
+                'items': <String, dynamic>{
+                  'type': 'object',
+                  'additionalProperties': true,
+                },
               },
             },
           },
@@ -1723,7 +1864,8 @@ Map<String, dynamic> buildOpenApiSpec({
             properties: <String, dynamic>{
               'follow': <String, dynamic>{
                 'type': 'boolean',
-                'description': 'true to follow, false to unfollow. Omit to toggle.',
+                'description':
+                    'true to follow, false to unfollow. Omit to toggle.',
               },
             },
           ),
@@ -2494,7 +2636,8 @@ Map<String, dynamic> buildOpenApiSpec({
       },
       '/subscriptions/status': <String, dynamic>{
         'get': _operation(
-          summary: 'Check subscription status — auto-expires to Free after 30 days',
+          summary:
+              'Check subscription status — auto-expires to Free after 30 days',
           tag: 'Billing',
           parameters: <Map<String, dynamic>>[
             _queryParam(
@@ -2584,7 +2727,8 @@ Map<String, dynamic> _operation({
       'description': successDescription,
       'content': <String, dynamic>{
         'application/json': <String, dynamic>{
-          'schema': successResponseSchema ??
+          'schema':
+              successResponseSchema ??
               <String, dynamic>{
                 'type': 'object',
                 'additionalProperties': true,
