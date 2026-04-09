@@ -39,6 +39,21 @@ class AuthService {
     return _signIn(payload, role: 'artisan', collection: 'artisans');
   }
 
+  Future<Map<String, dynamic>> signOut({required String idToken}) async {
+    await _authClient.revokeRefreshTokens(idToken: idToken);
+    return <String, dynamic>{'message': 'Signed out successfully.'};
+  }
+
+  Future<Map<String, dynamic>> forgotPassword({required String email}) async {
+    if (email.trim().isEmpty) {
+      throw ApiException.badRequest('email is required.');
+    }
+    await _authClient.sendPasswordResetEmail(email: email.trim());
+    return <String, dynamic>{
+      'message': 'Password reset email sent to ${email.trim()}.',
+    };
+  }
+
   Future<Map<String, dynamic>> _signUp(
     Map<String, dynamic> payload, {
     required String role,
@@ -192,6 +207,11 @@ class AuthService {
       role: role,
       now: now,
     );
+
+    final appToken = _optionalString(payload, 'appToken');
+    if (appToken != null) {
+      profile['appToken'] = appToken;
+    }
 
     final referralId =
         _optionalString(profile, 'referralId') ?? _generateReferralCode();

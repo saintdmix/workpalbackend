@@ -78,6 +78,7 @@ Map<String, dynamic> buildOpenApiSpec({
             properties: <String, dynamic>{
               'email': _stringSchema(description: 'Customer email'),
               'password': _stringSchema(description: 'Customer password'),
+              'appToken': _stringSchema(description: 'Optional FCM push token attached on sign in'),
             },
             required: const <String>['email', 'password'],
           ),
@@ -146,6 +147,7 @@ Map<String, dynamic> buildOpenApiSpec({
             properties: <String, dynamic>{
               'email': _stringSchema(description: 'Artisan email'),
               'password': _stringSchema(description: 'Artisan password'),
+              'appToken': _stringSchema(description: 'Optional FCM push token attached on sign in'),
             },
             required: const <String>['email', 'password'],
           ),
@@ -154,6 +156,29 @@ Map<String, dynamic> buildOpenApiSpec({
             'password': 'secret123',
           },
           requiresAuth: false,
+        ),
+      },
+      '/auth/forgot_password': <String, dynamic>{
+        'post': _operation(
+          summary: 'Send password reset email',
+          tag: 'Auth',
+          requestBodyDescription: 'Email payload.',
+          requestBodySchema: _objectSchema(
+            properties: <String, dynamic>{
+              'email': _stringSchema(description: 'Registered email address.'),
+            },
+            required: const <String>['email'],
+          ),
+          requestBodyExample: <String, dynamic>{
+            'email': 'user@example.com',
+          },
+          requiresAuth: false,
+        ),
+      },
+      '/auth/sign_out': <String, dynamic>{
+        'post': _operation(
+          summary: 'Sign out — invalidates the current session token',
+          tag: 'Auth',
         ),
       },
       '/profile/app_token': <String, dynamic>{
@@ -1217,6 +1242,10 @@ Map<String, dynamic> buildOpenApiSpec({
               name: 'mine',
               description: 'Set true to show only jobs owned by caller.',
             ),
+            _queryParam(
+              name: 'applied',
+              description: 'Set true as an artisan/vendor to view only jobs you have applied to.',
+            ),
           ],
         ),
         'post': _operation(
@@ -1283,7 +1312,7 @@ Map<String, dynamic> buildOpenApiSpec({
                     'type': 'array',
                     'items': <String, dynamic>{'type': 'string'},
                   },
-                  'status': _stringSchema(description: 'Defaults to open.'),
+                  'status': _stringSchema(description: 'Defaults to review.'),
                 },
                 required: const <String>['title', 'category'],
                 additionalProperties: true,
@@ -1414,8 +1443,8 @@ Map<String, dynamic> buildOpenApiSpec({
             additionalProperties: true,
           ),
           requestBodyExample: <String, dynamic>{
-            'status': 'in_progress',
-            'budgetMax': 300000,
+            'status': 'completed',
+            'assignedVendorId': 'uid_artisan_xyz',
           },
         ),
         'delete': _operation(
@@ -1430,19 +1459,7 @@ Map<String, dynamic> buildOpenApiSpec({
           ],
         ),
       },
-      '/jobs/{job_id}/apply': <String, dynamic>{
-        'post': _operation(
-          summary: 'Apply to job post',
-          tag: 'Hiring',
-          parameters: <Map<String, dynamic>>[
-            _pathParam(name: 'job_id'),
-            _queryParam(
-              name: 'role',
-              description: 'Role hint (vendor|artisan).',
-            ),
-          ],
-        ),
-      },
+
       '/quotes': <String, dynamic>{
         'get': _operation(
           summary: 'List quotes',
@@ -1494,7 +1511,6 @@ Map<String, dynamic> buildOpenApiSpec({
                     'additionalProperties': true,
                   },
                 },
-                required: const <String>['otherId'],
                 additionalProperties: true,
               ),
               'example': <String, dynamic>{
@@ -1545,7 +1561,6 @@ Map<String, dynamic> buildOpenApiSpec({
                     'description': 'Optional existing URLs to include.',
                   },
                 },
-                'required': <String>['otherId'],
                 'additionalProperties': true,
               },
             },
@@ -1561,9 +1576,9 @@ Map<String, dynamic> buildOpenApiSpec({
           parameters: <Map<String, dynamic>>[
             _pathParam(name: 'quote_id'),
             _queryParam(
-              name: 'chatRoomId',
-              description: 'Chat room id that contains the quote.',
-              required: true,
+              name: 'artisanId',
+              description: 'The artisan ID (use this instead of chatRoomId).',
+              required: false,
             ),
             _queryParam(
               name: 'role',
@@ -1577,9 +1592,9 @@ Map<String, dynamic> buildOpenApiSpec({
           parameters: <Map<String, dynamic>>[
             _pathParam(name: 'quote_id'),
             _queryParam(
-              name: 'chatRoomId',
-              description: 'Chat room id that contains the quote.',
-              required: true,
+              name: 'artisanId',
+              description: 'The artisan ID (use this instead of chatRoomId).',
+              required: false,
             ),
             _queryParam(
               name: 'role',
@@ -1596,83 +1611,103 @@ Map<String, dynamic> buildOpenApiSpec({
           requestBodyExample: <String, dynamic>{'status': 'accepted'},
         ),
       },
-      '/active_projects': <String, dynamic>{
-        'get': _operation(
-          summary: 'List active projects',
-          tag: 'Hiring',
+      '/reviews': <String, dynamic>{
+        'post': _operation(
+          summary: 'Create review for a vendor/artisan',
+          tag: 'Reviews',
           parameters: <Map<String, dynamic>>[
             _queryParam(
               name: 'role',
               description: 'Role hint: customer|vendor|artisan.',
             ),
-            _queryParam(
-              name: 'limit',
-              description: 'Max number of active projects.',
-            ),
-            _queryParam(
-              name: 'pageToken',
-              description: 'Pagination cursor token.',
-            ),
-            _queryParam(
-              name: 'status',
-              description: 'Filter by project status.',
-            ),
-            _queryParam(
-              name: 'mine',
-              description: 'Set true to show only your projects.',
-            ),
-            _queryParam(name: 'search', description: 'Search text.'),
           ],
-        ),
-      },
-      '/active_projects/{project_id}': <String, dynamic>{
-        'get': _operation(
-          summary: 'Get active project',
-          tag: 'Hiring',
-          parameters: <Map<String, dynamic>>[
-            _pathParam(name: 'project_id'),
-            _queryParam(
-              name: 'role',
-              description: 'Role hint: customer|vendor|artisan.',
-            ),
-          ],
-        ),
-        'patch': _operation(
-          summary: 'Update active project',
-          tag: 'Hiring',
-          parameters: <Map<String, dynamic>>[
-            _pathParam(name: 'project_id'),
-            _queryParam(
-              name: 'role',
-              description: 'Role hint: customer|vendor|artisan.',
-            ),
-          ],
-          requestBodyDescription: 'Active project update payload.',
-          requestBodySchema: _objectSchema(
-            properties: <String, dynamic>{
-              'status': _stringSchema(),
-              'projectStatus': _stringSchema(),
-              'title': _stringSchema(),
-              'description': _stringSchema(),
+          requestBodyDescription:
+              'Review payload. Accepts JSON or multipart/form-data (for photo uploads).',
+          requestBodyContent: <String, dynamic>{
+            'application/json': <String, dynamic>{
+              'schema': _objectSchema(
+                properties: <String, dynamic>{
+                  'vendorId': _stringSchema(description: 'Target user ID.'),
+                  'jobId': _stringSchema(description: 'Optional associated job ID.'),
+                  'chatRoomId': _stringSchema(
+                    description: 'Optional associated chat room ID.',
+                  ),
+                  'overallRating': <String, dynamic>{
+                    'type': 'integer',
+                    'minimum': 1,
+                    'maximum': 5,
+                  },
+                  'communication': <String, dynamic>{
+                    'type': 'integer',
+                    'minimum': 1,
+                    'maximum': 5,
+                  },
+                  'value': <String, dynamic>{
+                    'type': 'integer',
+                    'minimum': 1,
+                    'maximum': 5,
+                  },
+                  'timeliness': <String, dynamic>{
+                    'type': 'integer',
+                    'minimum': 1,
+                    'maximum': 5,
+                  },
+                  'quality': <String, dynamic>{
+                    'type': 'integer',
+                    'minimum': 1,
+                    'maximum': 5,
+                  },
+                  'reviewText': _stringSchema(),
+                  'photoUrls': <String, dynamic>{
+                    'type': 'array',
+                    'items': <String, dynamic>{'type': 'string'},
+                  },
+                },
+                required: const <String>['vendorId', 'overallRating'],
+                additionalProperties: true,
+              ),
+              'example': <String, dynamic>{
+                'vendorId': 'uid_artisan_123',
+                'overallRating': 5,
+                'communication': 5,
+                'value': 4,
+                'timeliness': 5,
+                'quality': 5,
+                'reviewText': 'Excellent work on the cabinets!',
+              },
             },
-            additionalProperties: true,
-          ),
-          requestBodyExample: <String, dynamic>{
-            'status': 'completed',
+            'multipart/form-data': <String, dynamic>{
+              'schema': <String, dynamic>{
+                'type': 'object',
+                'properties': <String, dynamic>{
+                  'vendorId': _stringSchema(),
+                  'jobId': _stringSchema(),
+                  'chatRoomId': _stringSchema(),
+                  'overallRating': <String, dynamic>{'type': 'integer'},
+                  'communication': <String, dynamic>{'type': 'integer'},
+                  'value': <String, dynamic>{'type': 'integer'},
+                  'timeliness': <String, dynamic>{'type': 'integer'},
+                  'quality': <String, dynamic>{'type': 'integer'},
+                  'reviewText': _stringSchema(),
+                  'photos': <String, dynamic>{
+                    'type': 'array',
+                    'items': <String, dynamic>{
+                      'type': 'string',
+                      'format': 'binary',
+                      'description': 'Image file to upload.',
+                    },
+                  },
+                },
+                'required': <String>['vendorId', 'overallRating'],
+              },
+            },
           },
-        ),
-        'delete': _operation(
-          summary: 'Delete active project',
-          tag: 'Hiring',
-          parameters: <Map<String, dynamic>>[
-            _pathParam(name: 'project_id'),
-            _queryParam(
-              name: 'role',
-              description: 'Role hint: customer|vendor|artisan.',
-            ),
-          ],
+          successCode: 201,
+          successDescription: 'Review created.',
         ),
       },
+
+
       '/vendors': <String, dynamic>{
         'get': _operation(
           summary: 'Discover vendors',

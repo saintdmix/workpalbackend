@@ -16,8 +16,11 @@ Future<Response> onRequest(RequestContext context, String quote_id) async {
     final role = request.uri.queryParameters['role'];
     final chatRoomId =
         '${request.uri.queryParameters['chatRoomId'] ?? ''}'.trim();
-    if (chatRoomId.isEmpty) {
-      throw ApiException.badRequest('chatRoomId query parameter is required.');
+    final artisanId =
+        '${request.uri.queryParameters['artisanId'] ?? ''}'.trim();
+
+    if (chatRoomId.isEmpty && artisanId.isEmpty) {
+      throw ApiException.badRequest('Either chatRoomId or artisanId query parameter is required.');
     }
 
     final segments = request.uri.pathSegments;
@@ -32,6 +35,7 @@ Future<Response> onRequest(RequestContext context, String quote_id) async {
         role: role,
         quoteId: quoteId,
         chatRoomId: chatRoomId,
+        otherId: artisanId,
       );
       return Response.json(statusCode: HttpStatus.ok, body: result);
     }
@@ -50,6 +54,7 @@ Future<Response> onRequest(RequestContext context, String quote_id) async {
       role: role,
       quoteId: quoteId,
       chatRoomId: chatRoomId,
+      otherId: artisanId,
       status: status,
     );
     return Response.json(statusCode: HttpStatus.ok, body: result);

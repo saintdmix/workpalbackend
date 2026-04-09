@@ -37,6 +37,7 @@ class HiringService {
     String? category,
     String? search,
     bool? mine,
+    bool? applied,
   }) async {
     final actor = await _resolveActor(idToken: idToken, roleHint: role);
     final safeLimit = limit.clamp(1, 100).toInt();
@@ -55,6 +56,7 @@ class HiringService {
 
     final defaultMine = actor.isCustomer;
     final mineOnly = mine ?? defaultMine;
+    final appliedOnly = actor.isVendor && applied == true;
 
     final items = <Map<String, dynamic>>[];
     for (final raw in page.documents) {
@@ -69,10 +71,15 @@ class HiringService {
       if (!mineOnly &&
           actor.isVendor &&
           statusFilter == null &&
-          itemStatus != 'open') {
-        // Vendor browse defaults to open jobs to match feed behavior.
-        continue;
+          itemStatus != 'open' && itemStatus != 'review') {
+        // Vendor browse defaults to open/review jobs to match feed behavior.
+        // Unless they specifically look for their applied jobs.
+        if (!appliedOnly) continue;
       }
+      
+      final applicants = _readStringList(item['applicants']);
+      if (appliedOnly && !applicants.contains(actor.uid)) continue;
+
       if (customerFilter != null &&
           customerFilter.isNotEmpty &&
           ownerId != customerFilter) {
@@ -118,26 +125,18 @@ class HiringService {
     String? role,
     required Map<String, dynamic> payload,
   }) async {
-    // Resolve uid directly — don't require a specific collection profile.
-    final uid = await _resolveUid(idToken);
+    final actor = await _resolveActor(idToken: idToken, roleHint: role);
+    if (!actor.isCustomer) {
+      throw ApiException.forbidden('Only customers can post jobs.');
+    }
+    final uid = actor.uid;
 
     final title = _requiredString(payload, 'title');
     final category = _requiredString(payload, 'category');
     final isRemote = _asBool(payload['isRemote']) ?? false;
     final address = _optionalString(payload, 'address') ?? '';
 
-    // Fetch profile from any collection for customerName/customerImage.
-    Map<String, dynamic> profile = const <String, dynamic>{};
-    for (final collection in const <String>[
-      'customers', 'vendors', 'artisans', 'users',
-    ]) {
-      final doc = await _firestoreClient.getDocument(
-        collectionPath: collection,
-        documentId: uid,
-        idToken: idToken,
-      );
-      if (doc != null) { profile = doc; break; }
-    }
+    final profile = actor.profile;
 
     final nowIso = _nowIso();
     final nowMs = DateTime.now().millisecondsSinceEpoch;
@@ -175,7 +174,8 @@ class HiringService {
       'mediaImages': _readStringList(payload['mediaImages']),
       'requirements': _readStringList(payload['requirements']),
       'applicants': _readStringList(payload['applicants']),
-      'status': _optionalString(payload, 'status')?.toLowerCase() ?? 'open',
+      'status': _optionalString(payload, 'status')?.toLowerCase() ?? 'review',
+      'assignedVendorId': '',
       'timestamp': nowIso,
       'createdAt': nowMs,
       'updatedAt': nowIso,
@@ -244,8 +244,38 @@ class HiringService {
   }) async {
     final actor = await _resolveActor(idToken: idToken, roleHint: role);
     final existing = await _jobOrThrow(jobId: jobId, idToken: idToken);
+    
+    // Only job owner or the assigned artisan can update, depending on the logic.
+    // For now, job owner controls status (review -> progress -> completed)
     if ('${existing['customerId'] ?? ''}' != actor.uid) {
       throw ApiException.forbidden('Only the job owner can update this post.');
+    }
+
+    final String? nextStatus = _optionalString(payload, 'status')?.toLowerCase();
+    
+    // If completing the job, increment vendor's completed works
+    if (nextStatus == 'completed' && '${existing['status'] ?? ''}' != 'completed') {
+      final String assignedId = _optionalString(payload, 'assignedVendorId') ?? '${existing['assignedVendorId'] ?? ''}';
+      if (assignedId.isNotEmpty) {
+        // Find the profile and increment completed works
+        final artisanDoc = await _firestoreClient.getDocument(
+          collectionPath: 'artisans', documentId: assignedId, idToken: idToken
+        ) ?? await _firestoreClient.getDocument(
+          collectionPath: 'vendors', documentId: assignedId, idToken: idToken
+        );
+        if (artisanDoc != null) {
+          final int currentCount = (artisanDoc['completedWorks'] as num?)?.toInt() ?? 0;
+          await _firestoreClient.setDocument(
+            collectionPath: artisanDoc.containsKey('isArtisan') ? 'artisans' : 'vendors',
+            documentId: assignedId,
+            idToken: idToken,
+            data: <String, dynamic>{
+              ...artisanDoc,
+              'completedWorks': currentCount + 1,
+            }
+          );
+        }
+      }
     }
 
     final updates = _sanitizeJobUpdates(payload);
@@ -289,56 +319,7 @@ class HiringService {
     return <String, dynamic>{'deleted': true, 'jobId': jobId.trim()};
   }
 
-  Future<Map<String, dynamic>> applyToJob({
-    required String idToken,
-    String? role,
-    required String jobId,
-    Map<String, dynamic>? payload,
-  }) async {
-    final actor = await _resolveActor(idToken: idToken, roleHint: role);
-    if (!actor.isVendor) {
-      throw ApiException.forbidden('Only artisans/vendors can apply to jobs.');
-    }
 
-    final job = await _jobOrThrow(jobId: jobId, idToken: idToken);
-    if ('${job['customerId'] ?? ''}' == actor.uid) {
-      throw ApiException.badRequest('You cannot apply to your own job post.');
-    }
-
-    final status = _jobStatus(job);
-    if (status != 'open') {
-      throw ApiException.conflict(
-        'This job is no longer accepting applications.',
-      );
-    }
-
-    final applicants = _readStringList(job['applicants']);
-    var applied = false;
-    if (!applicants.contains(actor.uid)) {
-      applicants.add(actor.uid);
-      applied = true;
-    }
-
-    final merged = <String, dynamic>{
-      ...job,
-      'applicants': applicants,
-      'updatedAt': _nowIso(),
-    };
-    await _firestoreClient.setDocument(
-      collectionPath: 'job_posts',
-      documentId: jobId.trim(),
-      idToken: idToken,
-      data: merged,
-    );
-
-    return <String, dynamic>{
-      'jobId': jobId.trim(),
-      'applied': applied,
-      'applicantCount': applicants.length,
-      'applicants': applicants,
-      if (payload != null && payload.isNotEmpty) 'meta': payload,
-    };
-  }
 
   Future<Map<String, dynamic>> listQuotes({
     required String idToken,
@@ -412,9 +393,29 @@ class HiringService {
           _timestampMs(b['timestamp']).compareTo(_timestampMs(a['timestamp'])),
     );
 
+    final takenItems = filtered.take(safeLimit).toList();
+    
+    final applicantIds = takenItems
+        .map((q) => '${q['senderId'] ?? ''}'.trim())
+        .where((id) => id.isNotEmpty)
+        .toSet();
+
+    final applicants = <Map<String, dynamic>>[];
+    for (final uid in applicantIds) {
+      try {
+        final doc = await _firestoreClient.getDocument(
+          collectionPath: 'users',
+          documentId: uid,
+          idToken: idToken,
+        );
+        if (doc != null) applicants.add(doc);
+      } catch (_) {}
+    }
+
     return <String, dynamic>{
-      'items': filtered.take(safeLimit).toList(),
-      'count': min(filtered.length, safeLimit).toInt(),
+      'items': takenItems,
+      'count': takenItems.length,
+      'applicants': applicants,
       if (roomId.isNotEmpty) 'chatRoomId': roomId,
     };
   }
@@ -425,19 +426,40 @@ class HiringService {
     required Map<String, dynamic> payload,
   }) async {
     final actor = await _resolveActor(idToken: idToken, roleHint: role);
-    final otherId = _requiredString(
-      payload,
-      'otherId',
-      aliases: const <String>['receiverId', 'customerId', 'vendorId'],
-    );
-    final roomId = _optionalString(payload, 'chatRoomId') ??
-        _buildChatRoomId(actor.uid, otherId);
 
     final quoteData =
         _mapOrNull(payload['quoteData']) ?? _buildQuoteData(payload);
     if (quoteData.isEmpty) {
       throw ApiException.badRequest('quoteData is required.');
     }
+    
+    final quoteJobId = '${quoteData['jobId'] ?? ''}'.trim();
+    
+    String otherId = _optionalString(payload, 'otherId') ?? 
+                     _optionalString(payload, 'receiverId') ?? 
+                     _optionalString(payload, 'customerId') ?? 
+                     _optionalString(payload, 'vendorId') ?? '';
+                     
+    // If quoting a job and otherId wasn't given, auto-derive it from the job post.                 
+    if (otherId.isEmpty && quoteJobId.isNotEmpty) {
+      final job = await _firestoreClient.getDocument(
+        collectionPath: 'job_posts',
+        documentId: quoteJobId,
+        idToken: idToken,
+      );
+      if (job != null) {
+        otherId = '${job['customerId'] ?? ''}'.trim();
+      }
+    }
+    
+    if (otherId.isEmpty) {
+      throw ApiException.badRequest(
+        'Could not determine receiver. Please provide otherId or a valid quoteData.jobId',
+      );
+    }
+
+    final roomId = _optionalString(payload, 'chatRoomId') ??
+        _buildChatRoomId(actor.uid, otherId);
 
     final projectName = '${quoteData['projectName'] ?? ''}'.trim();
     final text = _optionalString(payload, 'text') ??
@@ -464,7 +486,6 @@ class HiringService {
       role: actor.role,
     );
 
-    final quoteJobId = '${quoteData['jobId'] ?? ''}'.trim();
     if (quoteJobId.isNotEmpty && actor.isVendor) {
       await _appendApplicant(
         idToken: idToken,
@@ -484,11 +505,22 @@ class HiringService {
     required String idToken,
     String? role,
     required String quoteId,
-    required String chatRoomId,
+    String? chatRoomId,
+    String? otherId,
   }) async {
+    final actor = await _resolveActor(idToken: idToken, roleHint: role);
+    final roomId = (chatRoomId != null && chatRoomId.trim().isNotEmpty)
+        ? chatRoomId.trim()
+        : _buildChatRoomId(actor.uid, otherId ?? '');
+
+    if (roomId.isEmpty ||
+        !roomId.contains('_') ||
+        (roomId.split('_')[0].isEmpty && roomId.split('_')[1].isEmpty)) {
+      throw ApiException.badRequest('Valid chatRoomId or artisanId/otherId is required.');
+    }
     final message = await _chatService.getMessage(
       idToken: idToken,
-      chatRoomId: chatRoomId.trim(),
+      chatRoomId: roomId,
       messageId: quoteId.trim(),
       role: role,
     );
@@ -502,12 +534,23 @@ class HiringService {
     required String idToken,
     String? role,
     required String quoteId,
-    required String chatRoomId,
+    String? chatRoomId,
+    String? otherId,
     required String status,
   }) async {
+    final actor = await _resolveActor(idToken: idToken, roleHint: role);
+    final roomId = (chatRoomId != null && chatRoomId.trim().isNotEmpty)
+        ? chatRoomId.trim()
+        : _buildChatRoomId(actor.uid, otherId ?? '');
+
+    if (roomId.isEmpty ||
+        !roomId.contains('_') ||
+        (roomId.split('_')[0].isEmpty && roomId.split('_')[1].isEmpty)) {
+      throw ApiException.badRequest('Valid chatRoomId or artisanId/otherId is required.');
+    }
     final current = await _chatService.getMessage(
       idToken: idToken,
-      chatRoomId: chatRoomId.trim(),
+      chatRoomId: roomId,
       messageId: quoteId.trim(),
       role: role,
     );
@@ -517,184 +560,49 @@ class HiringService {
 
     final result = await _chatService.updateQuoteStatus(
       idToken: idToken,
-      chatRoomId: chatRoomId.trim(),
+      chatRoomId: roomId,
       messageId: quoteId.trim(),
       status: status,
       role: role,
     );
     final updated = await _chatService.getMessage(
       idToken: idToken,
-      chatRoomId: chatRoomId.trim(),
+      chatRoomId: roomId,
       messageId: quoteId.trim(),
       role: role,
     );
+
+    if (status.toLowerCase() == 'accepted') {
+      final quoteData = _mapOrNull(updated['quoteData']) ?? const <String, dynamic>{};
+      final jobId = '${quoteData['jobId'] ?? ''}'.trim();
+      if (jobId.isNotEmpty) {
+        final job = await _firestoreClient.getDocument(
+          collectionPath: 'job_posts',
+          documentId: jobId,
+          idToken: idToken,
+        );
+        if (job != null) {
+          final artisanId = '${updated['senderId'] ?? ''}'.trim();
+          await _firestoreClient.setDocument(
+            collectionPath: 'job_posts',
+            documentId: jobId,
+            idToken: idToken,
+            data: <String, dynamic>{
+              ...job,
+              'status': 'progress',
+              'assignedVendorId': artisanId,
+              'applicants': artisanId.isNotEmpty ? <String>[artisanId] : <String>[],
+              'updatedAt': _nowIso(),
+            },
+          );
+        }
+      }
+    }
+
     return <String, dynamic>{...result, 'quote': updated};
   }
 
-  Future<Map<String, dynamic>> listActiveProjects({
-    required String idToken,
-    String? role,
-    int limit = 30,
-    String? pageToken,
-    String? status,
-    bool? mine,
-    String? search,
-  }) async {
-    final actor = await _resolveActor(idToken: idToken, roleHint: role);
-    final safeLimit = limit.clamp(1, 100).toInt();
-    final statusFilter = _normalizeProjectStatus(status);
-    final searchFilter = search?.trim().toLowerCase();
 
-    final page = await _firestoreClient.listDocumentsPage(
-      collectionPath: 'activeProjects',
-      idToken: idToken,
-      pageSize: max(safeLimit * 4, 80).toInt(),
-      orderBy: 'updatedAt desc',
-      pageToken: pageToken,
-    );
-
-    final mineOnly = mine ?? true;
-    final items = <Map<String, dynamic>>[];
-    for (final raw in page.documents) {
-      final item = <String, dynamic>{...raw, 'id': '${raw['id'] ?? ''}'};
-      if (mineOnly && !_isProjectMine(item, actor)) continue;
-
-      final projectStatus = _normalizeProjectStatus(
-          '${item['projectStatus'] ?? item['status'] ?? ''}');
-      if (statusFilter.isNotEmpty) {
-        final acceptedValues = <String>{
-          projectStatus,
-          if (projectStatus == 'ongoing') 'in_progress',
-          if (projectStatus == 'in_progress') 'ongoing',
-        };
-        if (!acceptedValues.contains(statusFilter)) continue;
-      }
-      if (searchFilter != null && searchFilter.isNotEmpty) {
-        final haystack = <String>[
-          '${item['title'] ?? ''}',
-          '${item['projectName'] ?? ''}',
-          '${item['description'] ?? ''}',
-          '${item['assignedVendorName'] ?? ''}',
-        ].join(' ').toLowerCase();
-        if (!haystack.contains(searchFilter)) continue;
-      }
-      items.add(item);
-    }
-
-    items.sort(
-      (a, b) =>
-          _timestampMs(b['updatedAt']).compareTo(_timestampMs(a['updatedAt'])),
-    );
-
-    return <String, dynamic>{
-      'items': items.take(safeLimit).toList(),
-      'count': min(items.length, safeLimit).toInt(),
-      if (page.nextPageToken != null) 'nextPageToken': page.nextPageToken,
-    };
-  }
-
-  Future<Map<String, dynamic>> getActiveProject({
-    required String idToken,
-    String? role,
-    required String projectId,
-  }) async {
-    final actor = await _resolveActor(idToken: idToken, roleHint: role);
-    final project = await _activeProjectOrThrow(
-      projectId: projectId.trim(),
-      idToken: idToken,
-    );
-    if (!_isProjectMine(project, actor)) {
-      throw ApiException.forbidden('You do not have access to this project.');
-    }
-    return project;
-  }
-
-  Future<Map<String, dynamic>> updateActiveProject({
-    required String idToken,
-    String? role,
-    required String projectId,
-    required Map<String, dynamic> payload,
-  }) async {
-    final actor = await _resolveActor(idToken: idToken, roleHint: role);
-    final current = await _activeProjectOrThrow(
-      projectId: projectId.trim(),
-      idToken: idToken,
-    );
-    if (!_isProjectMine(current, actor)) {
-      throw ApiException.forbidden('You do not have access to this project.');
-    }
-
-    final status = _normalizeProjectStatus(
-      _optionalString(payload, 'status') ??
-          _optionalString(payload, 'projectStatus'),
-    );
-    if (status.isNotEmpty) {
-      final voteStatus = status == 'in_progress' ? 'ongoing' : status;
-      final voted = await _chatService.voteProjectStatus(
-        idToken: idToken,
-        chatRoomId: projectId.trim(),
-        status: voteStatus,
-        role: actor.role,
-      );
-      final refreshed = await _activeProjectOrThrow(
-        projectId: projectId.trim(),
-        idToken: idToken,
-      );
-      return <String, dynamic>{...voted, 'project': refreshed};
-    }
-
-    final updates = Map<String, dynamic>.from(payload)
-      ..removeWhere((key, _) => const <String>{
-            'id',
-            'chatRoomId',
-            'customerId',
-            'vendorId',
-            'assignedVendorId',
-          }.contains(key));
-    if (updates.isEmpty) {
-      throw ApiException.badRequest('No editable fields were provided.');
-    }
-    final merged = <String, dynamic>{
-      ...current,
-      ...updates,
-      'updatedAt': _nowIso(),
-    };
-    await _firestoreClient.setDocument(
-      collectionPath: 'activeProjects',
-      documentId: projectId.trim(),
-      idToken: idToken,
-      data: merged,
-    );
-    return merged;
-  }
-
-  Future<Map<String, dynamic>> deleteActiveProject({
-    required String idToken,
-    String? role,
-    required String projectId,
-  }) async {
-    final actor = await _resolveActor(idToken: idToken, roleHint: role);
-    final current = await _activeProjectOrThrow(
-      projectId: projectId.trim(),
-      idToken: idToken,
-    );
-    if ('${current['customerId'] ?? ''}' != actor.uid) {
-      throw ApiException.forbidden(
-          'Only the customer can remove this project.');
-    }
-    await _firestoreClient.deleteDocument(
-      collectionPath: 'activeProjects',
-      documentId: projectId.trim(),
-      idToken: idToken,
-    );
-    return <String, dynamic>{'deleted': true, 'projectId': projectId.trim()};
-  }
-
-  String _normalizeProjectStatus(String? value) {
-    final normalized = (value ?? '').trim().toLowerCase();
-    if (normalized == 'in_progress') return 'ongoing';
-    return normalized;
-  }
 
   Future<void> _appendApplicant({
     required String idToken,
@@ -739,23 +647,6 @@ class HiringService {
     return <String, dynamic>{'id': normalized, ...doc};
   }
 
-  Future<Map<String, dynamic>> _activeProjectOrThrow({
-    required String projectId,
-    required String idToken,
-  }) async {
-    final normalized = projectId.trim();
-    if (normalized.isEmpty) {
-      throw ApiException.badRequest('project_id is required.');
-    }
-    final doc = await _firestoreClient.getDocument(
-      collectionPath: 'activeProjects',
-      documentId: normalized,
-      idToken: idToken,
-    );
-    if (doc == null) throw ApiException.notFound('Active project not found.');
-    return <String, dynamic>{'id': normalized, ...doc};
-  }
-
   Future<List<Map<String, dynamic>>> _quotesForRoom({
     required String idToken,
     required String role,
@@ -777,30 +668,6 @@ class HiringService {
       out.add(<String, dynamic>{...msg, 'chatRoomId': chatRoomId});
     }
     return out;
-  }
-
-  Future<Map<String, dynamic>> _requireProfile({
-    required String collectionPath,
-    required String userId,
-    required String idToken,
-  }) async {
-    final profile = await _firestoreClient.getDocument(
-      collectionPath: collectionPath,
-      documentId: userId,
-      idToken: idToken,
-    );
-    if (profile == null) {
-      throw ApiException.notFound('Profile not found.');
-    }
-    return profile;
-  }
-
-  bool _isProjectMine(Map<String, dynamic> project, _ActorContext actor) {
-    final customerId = '${project['customerId'] ?? ''}'.trim();
-    final vendorId = '${project['vendorId'] ?? ''}'.trim();
-    final assignedVendorId = '${project['assignedVendorId'] ?? ''}'.trim();
-    if (actor.isCustomer) return customerId == actor.uid;
-    return vendorId == actor.uid || assignedVendorId == actor.uid;
   }
 
   Map<String, dynamic> _sanitizeJobUpdates(Map<String, dynamic> payload) {

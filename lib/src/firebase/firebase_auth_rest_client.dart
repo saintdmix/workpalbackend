@@ -90,6 +90,46 @@ class FirebaseAuthRestClient {
     };
   }
 
+  Future<void> sendPasswordResetEmail({required String email}) async {
+    final response = await _http.post(
+      Uri.parse(
+        'https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key=$_webApiKey',
+      ),
+      headers: {'content-type': 'application/json'},
+      body: jsonEncode({'requestType': 'PASSWORD_RESET', 'email': email}),
+    );
+    if (response.statusCode >= 400) {
+      final decoded = _decodeObject(response.body);
+      final msg =
+          (decoded['error'] as Map<String, dynamic>?)?['message']?.toString() ??
+              'Failed to send reset email.';
+      throw ApiException.badRequest(_friendlyFirebaseAuthError(msg));
+    }
+  }
+
+  Future<void> revokeRefreshTokens({required String idToken}) async {
+    final user = await lookup(idToken: idToken);
+    final uid = '${user['localId'] ?? ''}'.trim();
+    if (uid.isEmpty) throw ApiException.unauthorized('Invalid token.');
+    final response = await _http.post(
+      Uri.parse(
+        'https://identitytoolkit.googleapis.com/v1/accounts:update?key=$_webApiKey',
+      ),
+      headers: {'content-type': 'application/json'},
+      body: jsonEncode({
+        'idToken': idToken,
+        'returnSecureToken': false,
+      }),
+    );
+    if (response.statusCode >= 400) {
+      final decoded = _decodeObject(response.body);
+      final msg =
+          (decoded['error'] as Map<String, dynamic>?)?['message']?.toString() ??
+              'Sign out failed.';
+      throw ApiException.server(msg);
+    }
+  }
+
   Future<Map<String, dynamic>> lookup({
     required String idToken,
   }) async {

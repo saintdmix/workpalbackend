@@ -7,7 +7,7 @@ Response onRequest(RequestContext context) {
       'service': 'workpal-auth-backend',
       'status': 'ok',
       'message':
-          'Auth, profile, legacy, media, notifications, monetization, promotions, commerce, NRI legacy modules, workfeeds, stories, vendors, relationships, favorites, reviews, chats, chatlist, jobs, quotes, and active-project endpoints are available.',
+          'Auth, profile, legacy, media, notifications, monetization, promotions, commerce, NRI legacy modules, workfeeds, stories, vendors, relationships, favorites, reviews, chats, chatlist, jobs, and quotes endpoints are available.',
       'endpoints': <String>[
         'POST /auth/customer/sign_up',
         'POST /auth/customer/sign_in',
@@ -113,11 +113,8 @@ Response onRequest(RequestContext context) {
         'GET|POST /chatlist/pins',
         'GET|POST /jobs?role=customer|vendor|artisan&mine=&status=&customerId=&category=&search=',
         'GET|PATCH|DELETE /jobs/{job_id}',
-        'POST /jobs/{job_id}/apply?role=vendor|artisan',
         'GET|POST /quotes?role=customer|vendor|artisan&chatRoomId=&status=&jobId=',
         'GET|PATCH /quotes/{quote_id}?chatRoomId=&role=customer|vendor|artisan',
-        'GET /active_projects?role=customer|vendor|artisan&status=&mine=&search=',
-        'GET|PATCH|DELETE /active_projects/{project_id}?role=customer|vendor|artisan',
       ],
     },
   );

@@ -25,6 +25,7 @@ Future<Response> onRequest(RequestContext context) async {
       final category = request.uri.queryParameters['category'];
       final search = request.uri.queryParameters['search'];
       final mine = _parseBool(request.uri.queryParameters['mine']);
+      final applied = _parseBool(request.uri.queryParameters['applied']);
 
       final result = await hiringService.listJobs(
         idToken: idToken,
@@ -36,6 +37,7 @@ Future<Response> onRequest(RequestContext context) async {
         category: category,
         search: search,
         mine: mine,
+        applied: applied,
       );
       return Response.json(statusCode: HttpStatus.ok, body: result);
     }
