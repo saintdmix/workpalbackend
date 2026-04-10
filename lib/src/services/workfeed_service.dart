@@ -90,6 +90,7 @@ class WorkfeedService {
     final enriched = await _enrichWithVerification(
       posts: trimmed,
       idToken: idToken,
+      uid: uid,
     );
 
     return (items: enriched, nextPageToken: page.nextPageToken);
@@ -98,6 +99,7 @@ class WorkfeedService {
   Future<List<Map<String, dynamic>>> _enrichWithVerification({
     required List<Map<String, dynamic>> posts,
     required String idToken,
+    required String uid,
   }) async {
     final uniqueIds = posts
         .map((p) => '${p['artisanId'] ?? ''}'.trim())
@@ -105,26 +107,38 @@ class WorkfeedService {
         .toSet();
 
     final profileMap = <String, Map<String, dynamic>>{};
-    for (final uid in uniqueIds) {
+    for (final artisanUid in uniqueIds) {
       for (final collection in const <String>['artisans', 'vendors']) {
         final doc = await _firestoreClient.getDocument(
           collectionPath: collection,
-          documentId: uid,
+          documentId: artisanUid,
           idToken: idToken,
         );
         if (doc != null) {
-          profileMap[uid] = doc;
+          profileMap[artisanUid] = doc;
           break;
         }
       }
     }
 
+    final savedPostDocs = await _firestoreClient.listDocuments(
+      collectionPath: 'userSavedPosts/$uid/posts',
+      idToken: idToken,
+    );
+    final savedPostIds = savedPostDocs.map((d) => '${d['id'] ?? ''}').toSet();
+
     return posts.map((post) {
-      final uid = '${post['artisanId'] ?? ''}'.trim();
-      final profile = profileMap[uid] ?? const <String, dynamic>{};
+      final artisanUid = '${post['artisanId'] ?? ''}'.trim();
+      final profile = profileMap[artisanUid] ?? const <String, dynamic>{};
+      final postId = '${post['id'] ?? ''}';
+      
+      final likes = _readStringList(post['likes']);
+
       return <String, dynamic>{
         ...post,
         'isVerified': profile['isVerified'] == true,
+        'isSaved': savedPostIds.contains(postId),
+        'isLiked': likes.contains(uid),
         'artisanName': post['artisanName'] ??
             profile['name'] ??
             profile['username'] ??
