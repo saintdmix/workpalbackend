@@ -68,6 +68,77 @@ class WorkfeedEngagementService {
     };
   }
 
+  Future<Map<String, dynamic>> toggleSavedPost({
+    required String idToken,
+    required String postId,
+  }) async {
+    final uid = await _resolveUid(idToken);
+    final normalizedPostId = postId.trim();
+    if (normalizedPostId.isEmpty) {
+      throw ApiException.badRequest('post_id is required.');
+    }
+
+    // Check if post exists
+    final post = await _firestoreClient.getDocument(
+      collectionPath: 'posts',
+      documentId: normalizedPostId,
+      idToken: idToken,
+    );
+    if (post == null) {
+      throw ApiException.notFound('Workfeed post not found.');
+    }
+
+    final collectionPath = 'userSavedPosts/$uid/posts';
+    final existing = await _firestoreClient.getDocument(
+      collectionPath: collectionPath,
+      documentId: normalizedPostId,
+      idToken: idToken,
+    );
+
+    final isSaved = existing != null;
+    if (isSaved) {
+      await _firestoreClient.deleteDocument(
+        collectionPath: collectionPath,
+        documentId: normalizedPostId,
+        idToken: idToken,
+      );
+    } else {
+      await _firestoreClient.setDocument(
+        collectionPath: collectionPath,
+        documentId: normalizedPostId,
+        idToken: idToken,
+        data: <String, dynamic>{
+          ...post,
+          'savedAt': DateTime.now().toUtc().toIso8601String(),
+        },
+      );
+    }
+
+    return <String, dynamic>{
+      'postId': normalizedPostId,
+      'saved': !isSaved,
+    };
+  }
+
+  Future<List<Map<String, dynamic>>> listSavedPosts({
+    required String idToken,
+    int limit = 50,
+    String? pageToken,
+  }) async {
+    final uid = await _resolveUid(idToken);
+    final safeLimit = limit.clamp(1, 100).toInt();
+
+    final page = await _firestoreClient.listDocumentsPage(
+      collectionPath: 'userSavedPosts/$uid/posts',
+      idToken: idToken,
+      pageSize: safeLimit,
+      orderBy: 'savedAt desc',
+      pageToken: pageToken,
+    );
+
+    return page.documents;
+  }
+
   Future<List<Map<String, dynamic>>> listComments({
     required String idToken,
     required String postId,

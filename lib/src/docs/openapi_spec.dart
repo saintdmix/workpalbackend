@@ -685,6 +685,44 @@ Map<String, dynamic> buildOpenApiSpec({
           parameters: <Map<String, dynamic>>[_pathParam(name: 'post_id')],
         ),
       },
+    '/workfeeds/{post_id}/save': <String, dynamic>{
+        'post': _operation(
+          summary: 'Toggle save post',
+          tag: 'Workfeed Engagement',
+          parameters: <Map<String, dynamic>>[_pathParam(name: 'post_id')],
+          successResponseSchema: _objectSchema(
+            properties: <String, dynamic>{
+              'postId': _stringSchema(),
+              'saved': <String, dynamic>{'type': 'boolean'},
+            },
+          ),
+        ),
+      },
+      '/workfeeds/saved_posts': <String, dynamic>{
+        'get': _operation(
+          summary: 'List user saved posts',
+          tag: 'Workfeeds',
+          parameters: <Map<String, dynamic>>[
+            _queryParam(name: 'limit', description: 'Max number of posts.'),
+            _queryParam(
+              name: 'pageToken',
+              description: 'Pagination cursor token from previous response.',
+            ),
+          ],
+          successResponseSchema: <String, dynamic>{
+            'type': 'object',
+            'properties': <String, dynamic>{
+              'items': <String, dynamic>{
+                'type': 'array',
+                'items': <String, dynamic>{
+                  'type': 'object',
+                  'additionalProperties': true,
+                },
+              },
+            },
+          },
+        ),
+      },
       '/workfeeds/{post_id}/interact': <String, dynamic>{
         'post': _operation(
           summary: 'Track post interaction (view, tap, profile visit)',
