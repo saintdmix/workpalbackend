@@ -999,12 +999,7 @@ class ChatService {
         );
       }
     }
-    return _ActorContext(
-      uid: uid,
-      role: hint == 'customer' ? 'customer' : 'vendor',
-      collection: hint == 'customer' ? 'customers' : 'vendors',
-      profile: const <String, dynamic>{},
-    );
+    throw ApiException.unauthorized('User profile not found.');
   }
 
   Future<Map<String, dynamic>> _ensureActorProfile({

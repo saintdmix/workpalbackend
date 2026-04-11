@@ -1177,34 +1177,99 @@ Map<String, dynamic> buildOpenApiSpec({
               description: 'Role hint: customer|vendor|artisan.',
             ),
           ],
-          requestBodyDescription: 'Message payload.',
-          requestBodySchema: _objectSchema(
-            properties: <String, dynamic>{
-              'otherId': _stringSchema(),
-              'receiverId': _stringSchema(),
-              'text': _stringSchema(),
-              'audioUrl': _stringSchema(),
-              'audioDuration': <String, dynamic>{'type': 'integer'},
-              'imageUrls': <String, dynamic>{
-                'type': 'array',
-                'items': <String, dynamic>{'type': 'string'},
+          requestBodyDescription:
+              'Message payload. Accepts JSON or multipart/form-data (for image/video/audio uploads). Video uploads are limited to 20MB each.',
+          requestBodyContent: <String, dynamic>{
+            'application/json': <String, dynamic>{
+              'schema': _objectSchema(
+                properties: <String, dynamic>{
+                  'otherId': _stringSchema(),
+                  'receiverId': _stringSchema(),
+                  'text': _stringSchema(),
+                  'audioUrl': _stringSchema(),
+                  'audioDuration': <String, dynamic>{'type': 'integer'},
+                  'imageUrls': <String, dynamic>{
+                    'type': 'array',
+                    'items': <String, dynamic>{'type': 'string'},
+                  },
+                  'videoUrls': <String, dynamic>{
+                    'type': 'array',
+                    'items': <String, dynamic>{'type': 'string'},
+                  },
+                  'isQuoteRequest': <String, dynamic>{'type': 'boolean'},
+                  'quoteData': <String, dynamic>{
+                    'type': 'object',
+                    'additionalProperties': true,
+                  },
+                  'replyToId': _stringSchema(),
+                  'replyToText': _stringSchema(),
+                  'replyToSenderId': _stringSchema(),
+                },
+                required: const <String>['otherId'],
+                additionalProperties: true,
+              ),
+              'example': <String, dynamic>{
+                'otherId': 'uid_other_user',
+                'text': 'Hello, are you available tomorrow?',
               },
-              'videoUrls': <String, dynamic>{
-                'type': 'array',
-                'items': <String, dynamic>{'type': 'string'},
-              },
-              'isQuoteRequest': <String, dynamic>{'type': 'boolean'},
-              'quoteData': <String, dynamic>{
+            },
+            'multipart/form-data': <String, dynamic>{
+              'schema': <String, dynamic>{
                 'type': 'object',
+                'properties': <String, dynamic>{
+                  'otherId': _stringSchema(),
+                  'receiverId': _stringSchema(),
+                  'text': _stringSchema(),
+                  'audioDuration': <String, dynamic>{'type': 'integer'},
+                  'isQuoteRequest': <String, dynamic>{
+                    'type': 'string',
+                    'enum': <String>['true', 'false'],
+                    'description': 'Boolean value.',
+                  },
+                  'quoteData': _stringSchema(
+                    description:
+                        'JSON string for quoteData (optional for quote requests).',
+                  ),
+                  'replyToId': _stringSchema(),
+                  'replyToText': _stringSchema(),
+                  'replyToSenderId': _stringSchema(),
+                  'media': <String, dynamic>{
+                    'type': 'array',
+                    'items': <String, dynamic>{
+                      'type': 'string',
+                      'format': 'binary',
+                      'description':
+                          'Image/video/audio file to upload. Server routes by mime type (image/*, video/*, audio/*).',
+                    },
+                    'description':
+                        'Upload one or more files. Some clients require unique field names (media1, media2, image1...).',
+                  },
+                  'images': <String, dynamic>{
+                    'type': 'array',
+                    'items': <String, dynamic>{
+                      'type': 'string',
+                      'format': 'binary',
+                      'description': 'Image file to upload.',
+                    },
+                  },
+                  'videos': <String, dynamic>{
+                    'type': 'array',
+                    'items': <String, dynamic>{
+                      'type': 'string',
+                      'format': 'binary',
+                      'description': 'Video file to upload (max 20MB each).',
+                    },
+                  },
+                  'audio': <String, dynamic>{
+                    'type': 'string',
+                    'format': 'binary',
+                    'description': 'Audio file to upload.',
+                  },
+                },
+                'required': const <String>['otherId'],
                 'additionalProperties': true,
               },
             },
-            required: const <String>['otherId'],
-            additionalProperties: true,
-          ),
-          requestBodyExample: <String, dynamic>{
-            'otherId': 'uid_other_user',
-            'text': 'Hello, are you available tomorrow?',
           },
           successCode: 201,
           successDescription: 'Message sent.',
