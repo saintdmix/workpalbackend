@@ -1,3 +1,5 @@
+import 'package:workpalbackend/src/utils/notification_types.dart';
+
 Map<String, dynamic> buildOpenApiSpec({
   required Uri requestUri,
 }) {
@@ -78,7 +80,9 @@ Map<String, dynamic> buildOpenApiSpec({
             properties: <String, dynamic>{
               'email': _stringSchema(description: 'Customer email'),
               'password': _stringSchema(description: 'Customer password'),
-              'appToken': _stringSchema(description: 'Optional FCM push token attached on sign in'),
+              'appToken': _stringSchema(
+                description: 'Optional FCM push token attached on sign in',
+              ),
             },
             required: const <String>['email', 'password'],
           ),
@@ -147,7 +151,9 @@ Map<String, dynamic> buildOpenApiSpec({
             properties: <String, dynamic>{
               'email': _stringSchema(description: 'Artisan email'),
               'password': _stringSchema(description: 'Artisan password'),
-              'appToken': _stringSchema(description: 'Optional FCM push token attached on sign in'),
+              'appToken': _stringSchema(
+                description: 'Optional FCM push token attached on sign in',
+              ),
             },
             required: const <String>['email', 'password'],
           ),
@@ -424,7 +430,13 @@ Map<String, dynamic> buildOpenApiSpec({
             properties: <String, dynamic>{
               'title': _stringSchema(),
               'body': _stringSchema(),
-              'type': _stringSchema(),
+              'type': <String, dynamic>{
+                'type': 'string',
+                'enum': notificationTypeValues,
+                'description':
+                    'Notification type. Allowed values: '
+                    '${notificationTypeValues.join(', ')}.',
+              },
               'data': <String, dynamic>{
                 'type': 'object',
                 'additionalProperties': true,
@@ -434,10 +446,13 @@ Map<String, dynamic> buildOpenApiSpec({
             additionalProperties: true,
           ),
           requestBodyExample: <String, dynamic>{
-            'title': 'New promo',
-            'body': 'Check the new offers near you.',
-            'type': 'general',
-            'data': <String, dynamic>{'campaignId': 'cmp_001'},
+            'title': 'New job application',
+            'body': 'A new artisan applied for your job.',
+            'type': notificationTypeJobApplication,
+            'data': <String, dynamic>{
+              'jobId': 'job_001',
+              'applicantId': 'artisan_001',
+            },
           },
           successCode: 201,
           successDescription: 'Notification created.',
@@ -685,7 +700,7 @@ Map<String, dynamic> buildOpenApiSpec({
           parameters: <Map<String, dynamic>>[_pathParam(name: 'post_id')],
         ),
       },
-    '/workfeeds/{post_id}/save': <String, dynamic>{
+      '/workfeeds/{post_id}/save': <String, dynamic>{
         'post': _operation(
           summary: 'Toggle save post',
           tag: 'Workfeed Engagement',
@@ -1347,7 +1362,8 @@ Map<String, dynamic> buildOpenApiSpec({
             ),
             _queryParam(
               name: 'applied',
-              description: 'Set true as an artisan/vendor to view only jobs you have applied to.',
+              description:
+                  'Set true as an artisan/vendor to view only jobs you have applied to.',
             ),
           ],
         ),
@@ -1731,7 +1747,9 @@ Map<String, dynamic> buildOpenApiSpec({
               'schema': _objectSchema(
                 properties: <String, dynamic>{
                   'vendorId': _stringSchema(description: 'Target user ID.'),
-                  'jobId': _stringSchema(description: 'Optional associated job ID.'),
+                  'jobId': _stringSchema(
+                    description: 'Optional associated job ID.',
+                  ),
                   'chatRoomId': _stringSchema(
                     description: 'Optional associated chat room ID.',
                   ),
@@ -1809,7 +1827,6 @@ Map<String, dynamic> buildOpenApiSpec({
           successDescription: 'Review created.',
         ),
       },
-
 
       '/vendors': <String, dynamic>{
         'get': _operation(

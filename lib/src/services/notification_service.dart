@@ -4,6 +4,7 @@ import 'package:workpalbackend/src/config/env.dart';
 import 'package:workpalbackend/src/exceptions/api_exception.dart';
 import 'package:workpalbackend/src/firebase/firebase_auth_rest_client.dart';
 import 'package:workpalbackend/src/firebase/firestore_rest_client.dart';
+import 'package:workpalbackend/src/utils/notification_types.dart';
 
 final notificationService = NotificationService();
 
@@ -11,13 +12,15 @@ class NotificationService {
   NotificationService({
     FirebaseAuthRestClient? authClient,
     FirestoreRestClient? firestoreClient,
-  })  : _authClient = authClient ??
-            FirebaseAuthRestClient(webApiKey: AppEnv.firebaseWebApiKey),
-        _firestoreClient = firestoreClient ??
-            FirestoreRestClient(
-              projectId: AppEnv.firebaseProjectId,
-              webApiKey: AppEnv.firebaseWebApiKey,
-            );
+  }) : _authClient =
+           authClient ??
+           FirebaseAuthRestClient(webApiKey: AppEnv.firebaseWebApiKey),
+       _firestoreClient =
+           firestoreClient ??
+           FirestoreRestClient(
+             projectId: AppEnv.firebaseProjectId,
+             webApiKey: AppEnv.firebaseWebApiKey,
+           );
 
   final FirebaseAuthRestClient _authClient;
   final FirestoreRestClient _firestoreClient;
@@ -63,7 +66,11 @@ class NotificationService {
           collectionPath: collection,
           documentId: uid,
           idToken: idToken,
-          data: <String, dynamic>{...doc, 'appToken': appToken, 'updatedAt': now},
+          data: <String, dynamic>{
+            ...doc,
+            'appToken': appToken,
+            'updatedAt': now,
+          },
         );
       }
     }
@@ -76,7 +83,11 @@ class NotificationService {
       data: tokenData,
     );
 
-    return <String, dynamic>{'uid': uid, 'appToken': appToken, 'updatedAt': now};
+    return <String, dynamic>{
+      'uid': uid,
+      'appToken': appToken,
+      'updatedAt': now,
+    };
   }
 
   Future<List<Map<String, dynamic>>> listNotifications({
@@ -112,7 +123,7 @@ class NotificationService {
       filtered = filtered.take(limit).toList();
     }
 
-    return filtered;
+    return filtered.map(_decorateNotification).toList();
   }
 
   Future<Map<String, dynamic>> createNotification({
@@ -123,6 +134,7 @@ class NotificationService {
     final context = await _resolveUserContext(role, idToken);
     final title = _requiredString(payload, 'title');
     final body = _requiredString(payload, 'body');
+    final type = _normalizeNotificationType(payload);
     final now = DateTime.now().toUtc().toIso8601String();
 
     final store = await _getStoreDoc(
@@ -140,7 +152,9 @@ class NotificationService {
       'id': _createNotificationId(),
       'title': title,
       'body': body,
-      'type': _optionalString(payload, 'type') ?? 'general',
+      'type': type,
+      'typeLabel': notificationTypeLabel(type),
+      'typeDescription': notificationTypeDescription(type),
       'data': payload['data'] is Map ? payload['data'] : <String, dynamic>{},
       'read': false,
       'createdAt': now,
@@ -154,8 +168,7 @@ class NotificationService {
       items: items,
       updatedAt: now,
     );
-
-    return item;
+    return _decorateNotification(item);
   }
 
   Future<Map<String, dynamic>> markAsRead({
@@ -204,7 +217,7 @@ class NotificationService {
       updatedAt: now,
     );
 
-    return updatedItem;
+    return _decorateNotification(updatedItem);
   }
 
   Future<Map<String, dynamic>> markAllAsRead({
@@ -355,6 +368,30 @@ class NotificationService {
     final value = payload[key];
     if (value is String && value.trim().isNotEmpty) return value.trim();
     return null;
+  }
+
+  String _normalizeNotificationType(Map<String, dynamic> payload) {
+    final rawType = _optionalString(payload, 'type');
+    if (rawType == null) return notificationTypeGeneral;
+
+    final normalized = canonicalizeNotificationType(rawType);
+    if (normalized != null) return normalized;
+
+    throw ApiException.badRequest(
+      'type must be one of: ${notificationTypeValuesText()}.',
+    );
+  }
+
+  Map<String, dynamic> _decorateNotification(Map<String, dynamic> item) {
+    final type =
+        canonicalizeNotificationType('${item['type'] ?? ''}') ??
+        notificationTypeGeneral;
+    return <String, dynamic>{
+      ...item,
+      'type': type,
+      'typeLabel': notificationTypeLabel(type),
+      'typeDescription': notificationTypeDescription(type),
+    };
   }
 }
 

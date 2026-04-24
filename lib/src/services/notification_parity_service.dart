@@ -4,6 +4,7 @@ import 'package:workpalbackend/src/config/env.dart';
 import 'package:workpalbackend/src/exceptions/api_exception.dart';
 import 'package:workpalbackend/src/firebase/firebase_auth_rest_client.dart';
 import 'package:workpalbackend/src/firebase/firestore_rest_client.dart';
+import 'package:workpalbackend/src/utils/notification_types.dart';
 
 final notificationParityService = NotificationParityService();
 
@@ -11,13 +12,15 @@ class NotificationParityService {
   NotificationParityService({
     FirebaseAuthRestClient? authClient,
     FirestoreRestClient? firestoreClient,
-  })  : _authClient = authClient ??
-            FirebaseAuthRestClient(webApiKey: AppEnv.firebaseWebApiKey),
-        _firestoreClient = firestoreClient ??
-            FirestoreRestClient(
-              projectId: AppEnv.firebaseProjectId,
-              webApiKey: AppEnv.firebaseWebApiKey,
-            );
+  }) : _authClient =
+           authClient ??
+           FirebaseAuthRestClient(webApiKey: AppEnv.firebaseWebApiKey),
+       _firestoreClient =
+           firestoreClient ??
+           FirestoreRestClient(
+             projectId: AppEnv.firebaseProjectId,
+             webApiKey: AppEnv.firebaseWebApiKey,
+           );
 
   final FirebaseAuthRestClient _authClient;
   final FirestoreRestClient _firestoreClient;
@@ -34,7 +37,7 @@ class NotificationParityService {
   }) async {
     final actorUid = await _resolveUid(idToken);
     final kind = _parseSchema(schema);
-    final safeLimit = limit.clamp(1, 200).toInt();
+    final safeLimit = limit.clamp(1, 200);
     final target = _resolveTargetUid(
       actorUid: actorUid,
       targetUserId: targetUserId,
@@ -46,7 +49,7 @@ class NotificationParityService {
       final page = await _firestoreClient.listDocumentsPage(
         collectionPath: 'notifications',
         idToken: idToken,
-        pageSize: max(safeLimit * 3, 80).toInt(),
+        pageSize: max(safeLimit * 3, 80),
         orderBy: 'timestamp desc',
         pageToken: pageToken,
       );
@@ -54,13 +57,13 @@ class NotificationParityService {
       for (final doc in page.documents) {
         if ('${doc['userId'] ?? ''}'.trim() != target) continue;
         if (unreadOnly && _isRead(doc)) continue;
-        items.add(doc);
+        items.add(_decorateNotification(doc));
       }
       return <String, dynamic>{
         'schema': kind.value,
         'target': target,
         'items': items.take(safeLimit).toList(),
-        'count': min(items.length, safeLimit).toInt(),
+        'count': min(items.length, safeLimit),
         if (page.nextPageToken != null) 'nextPageToken': page.nextPageToken,
       };
     }
@@ -77,8 +80,10 @@ class NotificationParityService {
       orderBy: 'timestamp desc',
       pageToken: pageToken,
     );
-    final items =
-        page.documents.where((n) => !(unreadOnly && _isRead(n))).toList();
+    final items = page.documents
+        .where((n) => !(unreadOnly && _isRead(n)))
+        .map(_decorateNotification)
+        .toList();
     return <String, dynamic>{
       'schema': kind.value,
       'target': target,
@@ -106,6 +111,7 @@ class NotificationParityService {
 
     final title = _requiredString(payload, 'title');
     final body = _requiredString(payload, 'body');
+    final type = _normalizeNotificationType(payload);
     final notificationId =
         _optionalString(payload, 'id') ?? _nextId(prefix: 'n');
     final nowIso = _nowIso();
@@ -114,7 +120,9 @@ class NotificationParityService {
       'id': notificationId,
       'title': title,
       'body': body,
-      'type': _optionalString(payload, 'type') ?? 'general',
+      'type': type,
+      'typeLabel': notificationTypeLabel(type),
+      'typeDescription': notificationTypeDescription(type),
       'timestamp': nowIso,
       'createdAt': DateTime.now().millisecondsSinceEpoch,
       'isRead': false,
@@ -134,7 +142,11 @@ class NotificationParityService {
         documentId: notificationId,
         data: data,
       );
-      return <String, dynamic>{'schema': kind.value, 'target': target, ...data};
+      return <String, dynamic>{
+        'schema': kind.value,
+        'target': target,
+        ..._decorateNotification(data),
+      };
     }
 
     final path = _collectionPath(
@@ -148,7 +160,11 @@ class NotificationParityService {
       idToken: idToken,
       data: data,
     );
-    return <String, dynamic>{'schema': kind.value, 'target': target, ...data};
+    return <String, dynamic>{
+      'schema': kind.value,
+      'target': target,
+      ..._decorateNotification(data),
+    };
   }
 
   Future<Map<String, dynamic>> markAsRead({
@@ -176,7 +192,7 @@ class NotificationParityService {
       return <String, dynamic>{
         'schema': kind.value,
         'target': target,
-        ...updated
+        ..._decorateNotification(updated),
       };
     }
 
@@ -205,7 +221,7 @@ class NotificationParityService {
       idToken: idToken,
       data: updated,
     );
-    return <String, dynamic>{'id': id, ...updated};
+    return _decorateNotification(<String, dynamic>{'id': id, ...updated});
   }
 
   Future<Map<String, dynamic>> markAllAsRead({
@@ -360,7 +376,8 @@ class NotificationParityService {
       final adminTarget = adminDocId.trim();
       if (adminTarget.isEmpty) {
         throw ApiException.badRequest(
-            'adminDocId is required for admin schema.');
+          'adminDocId is required for admin schema.',
+        );
       }
       return adminTarget;
     }
@@ -441,6 +458,30 @@ class NotificationParityService {
     return null;
   }
 
+  String _normalizeNotificationType(Map<String, dynamic> payload) {
+    final rawType = _optionalString(payload, 'type');
+    if (rawType == null) return notificationTypeGeneral;
+
+    final normalized = canonicalizeNotificationType(rawType);
+    if (normalized != null) return normalized;
+
+    throw ApiException.badRequest(
+      'type must be one of: ${notificationTypeValuesText()}.',
+    );
+  }
+
+  Map<String, dynamic> _decorateNotification(Map<String, dynamic> item) {
+    final type =
+        canonicalizeNotificationType('${item['type'] ?? ''}') ??
+        notificationTypeGeneral;
+    return <String, dynamic>{
+      ...item,
+      'type': type,
+      'typeLabel': notificationTypeLabel(type),
+      'typeDescription': notificationTypeDescription(type),
+    };
+  }
+
   String _nextId({required String prefix}) {
     final micros = DateTime.now().microsecondsSinceEpoch;
     final suffix = _random.nextInt(999999).toString().padLeft(6, '0');
@@ -455,7 +496,8 @@ enum _NotificationSchema {
   legacy('legacy'),
   admin('admin'),
   items('items'),
-  flat('flat');
+  flat('flat')
+  ;
 
   const _NotificationSchema(this.value);
   final String value;
