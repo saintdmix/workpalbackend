@@ -46,18 +46,22 @@ class ChatService {
     for (final doc in page.documents) {
       // Firestore REST list is broad, so we enforce participant membership here.
       if (!_participantsContain(doc, actor.uid)) continue;
+      final room = await _hydrateChatListRoom(
+        room: doc,
+        actor: actor,
+        idToken: idToken,
+      );
+      if (room == null) continue;
       final needle = (search ?? '').trim().toLowerCase();
       if (needle.isNotEmpty) {
-        final label = actor.isVendor
-            ? '${doc['customerName'] ?? ''}'
-            : '${doc['vendorName'] ?? ''}';
+        final label = '${room['otherUserName'] ?? room['peerName'] ?? ''}';
         if (!label.toLowerCase().contains(needle)) continue;
       }
-      final id = '${doc['id'] ?? ''}';
+      final id = '${room['id'] ?? ''}';
       items.add(<String, dynamic>{
-        ...doc,
+        ...room,
         'isPinned': pinnedChats.contains(id),
-        'unreadCount': _toInt(doc['unreadCount_${actor.uid}']),
+        'unreadCount': _toInt(room['chatUnreadCount_${actor.uid}']),
       });
     }
 
@@ -91,7 +95,7 @@ class ChatService {
     final room =
         await _getRoomOrThrow(chatRoomId: chatRoomId, idToken: idToken);
     _ensureParticipant(room: room, uid: actor.uid);
-    return room;
+    return _decorateRoomForActor(room: room, actor: actor);
   }
 
   Future<Map<String, dynamic>> upsertChatRoom({
@@ -137,7 +141,10 @@ class ChatService {
       data: merged,
     );
 
-    return <String, dynamic>{'id': chatRoomId.trim(), ...merged};
+    return _decorateRoomForActor(
+      room: <String, dynamic>{'id': chatRoomId.trim(), ...merged},
+      actor: actor,
+    );
   }
 
   Future<Map<String, dynamic>> listMessages({
@@ -163,10 +170,16 @@ class ChatService {
     final items = <Map<String, dynamic>>[];
     for (final doc in page.documents) {
       if (_readStringList(doc['deletedFor']).contains(actor.uid)) continue;
-      items.add(<String, dynamic>{
-        ...doc,
-        'id': '${doc['id'] ?? doc['messageId'] ?? ''}',
-      });
+      items.add(
+        _decorateMessageForActor(
+          message: <String, dynamic>{
+            ...doc,
+            'id': '${doc['id'] ?? doc['messageId'] ?? ''}',
+          },
+          room: room,
+          actor: actor,
+        ),
+      );
     }
 
     return <String, dynamic>{
@@ -193,7 +206,11 @@ class ChatService {
     if (_readStringList(message['deletedFor']).contains(actor.uid)) {
       throw ApiException.notFound('Message not found.');
     }
-    return message;
+    return _decorateMessageForActor(
+      message: message,
+      room: room,
+      actor: actor,
+    );
   }
 
   Future<Map<String, dynamic>> sendMessage({
@@ -234,8 +251,9 @@ class ChatService {
           idToken: idToken,
         ) ??
         <String, dynamic>{};
-    if (room.isNotEmpty)
+    if (room.isNotEmpty) {
       _ensureParticipantOrPeer(room: room, uid: actor.uid, otherId: otherId);
+    }
 
     final messageId =
         _optionalString(payload, 'messageId') ?? _nextId(prefix: 'm');
@@ -285,6 +303,7 @@ class ChatService {
       otherId: otherId,
       timestamp: timestamp,
       preview: _messagePreview(message),
+      message: message,
     );
     // Keep chat-room summary fields in sync for chat-list rendering.
     await _firestoreClient.setDocument(
@@ -296,8 +315,15 @@ class ChatService {
 
     return <String, dynamic>{
       'chatRoomId': roomId,
-      'message': <String, dynamic>{'id': messageId, ...message},
-      'chatRoom': <String, dynamic>{'id': roomId, ...mergedRoom},
+      'message': _decorateMessageForActor(
+        message: <String, dynamic>{'id': messageId, ...message},
+        room: mergedRoom,
+        actor: actor,
+      ),
+      'chatRoom': _decorateRoomForActor(
+        room: <String, dynamic>{'id': roomId, ...mergedRoom},
+        actor: actor,
+      ),
     };
   }
 
@@ -341,6 +367,7 @@ class ChatService {
       data: <String, dynamic>{
         ...room,
         'unreadCount_${actor.uid}': 0,
+        'chatUnreadCount_${actor.uid}': 0,
         'updatedAt': _nowIso(),
       },
     );
@@ -508,8 +535,12 @@ class ChatService {
             ...room,
             'lastMessage': 'Forwarded: ${_messagePreview(forwarded)}',
             'lastMessageTimestamp': timestamp,
+            'lastChatMessage': 'Forwarded: ${_messagePreview(forwarded)}',
+            'lastChatMessageTimestamp': timestamp,
             'unreadCount_$receiverId':
                 _toInt(room['unreadCount_$receiverId']) + 1,
+            'chatUnreadCount_$receiverId':
+                _toInt(room['chatUnreadCount_$receiverId']) + 1,
             'updatedAt': timestamp,
           },
         );
@@ -687,7 +718,13 @@ class ChatService {
     );
     var count = 0;
     for (final room in rooms) {
-      count += _toInt(room['unreadCount_${actor.uid}']);
+      final hydrated = await _hydrateChatListRoom(
+        room: room,
+        actor: actor,
+        idToken: idToken,
+      );
+      if (hydrated == null) continue;
+      count += _toInt(hydrated['chatUnreadCount_${actor.uid}']);
     }
     return <String, dynamic>{'unreadCount': count};
   }
@@ -1085,20 +1122,32 @@ class ChatService {
     required String otherId,
     required String timestamp,
     required String preview,
+    required Map<String, dynamic> message,
   }) {
     final merged = <String, dynamic>{
       ...room,
       'participants': <String>[actor.uid, otherId],
-      'lastMessage': preview,
-      'lastMessageTimestamp': timestamp,
       'updatedAt': timestamp,
       'projectStatus': room['projectStatus'] ?? 'none',
       'vendorStatusVote': room['vendorStatusVote'] ?? 'none',
       'customerStatusVote': room['customerStatusVote'] ?? 'none',
+      'unreadCount_${actor.uid}': _toInt(room['unreadCount_${actor.uid}']),
+      'chatUnreadCount_${actor.uid}':
+          _toInt(room['chatUnreadCount_${actor.uid}']),
     };
-    merged['unreadCount_$otherId'] = _toInt(room['unreadCount_$otherId']) + 1;
-    merged['unreadCount_${actor.uid}'] =
-        _toInt(room['unreadCount_${actor.uid}']);
+    if (message['isQuoteRequest'] != true) {
+      merged['lastMessage'] = preview;
+      merged['lastMessageTimestamp'] = timestamp;
+      merged['lastChatMessage'] = preview;
+      merged['lastChatMessageTimestamp'] = timestamp;
+      merged['unreadCount_$otherId'] = _toInt(room['unreadCount_$otherId']) + 1;
+      merged['chatUnreadCount_$otherId'] =
+          _toInt(room['chatUnreadCount_$otherId']) + 1;
+    } else {
+      merged['unreadCount_$otherId'] = _toInt(room['unreadCount_$otherId']);
+      merged['chatUnreadCount_$otherId'] =
+          _toInt(room['chatUnreadCount_$otherId']);
+    }
     if (actor.isVendor) {
       merged['vendorId'] = actor.uid;
       merged['customerId'] = otherId;
@@ -1117,6 +1166,60 @@ class ChatService {
     return merged;
   }
 
+  Future<Map<String, dynamic>?> _hydrateChatListRoom({
+    required Map<String, dynamic> room,
+    required _ActorContext actor,
+    required String idToken,
+  }) async {
+    final roomId = '${room['id'] ?? ''}'.trim();
+    if (roomId.isEmpty) return null;
+
+    final unreadKey = 'chatUnreadCount_${actor.uid}';
+    final storedPreview = _optionalString(room, 'lastChatMessage');
+    final hasStoredSummary =
+        storedPreview != null &&
+        storedPreview.isNotEmpty &&
+        _timestampMs(room['lastChatMessageTimestamp']) > 0 &&
+        room.containsKey(unreadKey);
+
+    if (hasStoredSummary) {
+      return _decorateRoomForActor(
+        room: <String, dynamic>{
+          ...room,
+          'id': roomId,
+          'lastMessage': storedPreview,
+          'lastMessageTimestamp': room['lastChatMessageTimestamp'],
+        },
+        actor: actor,
+      );
+    }
+
+    final summary = await _findLatestChatSummary(
+      idToken: idToken,
+      chatRoomId: roomId,
+      actorUid: actor.uid,
+    );
+    if (summary == null) return null;
+
+    final updated = <String, dynamic>{
+      ...room,
+      'id': roomId,
+      'lastMessage': summary.preview,
+      'lastMessageTimestamp': summary.timestamp,
+      'lastChatMessage': summary.preview,
+      'lastChatMessageTimestamp': summary.timestamp,
+      unreadKey: summary.unreadCount,
+    };
+    await _firestoreClient.setDocument(
+      collectionPath: 'chatRooms',
+      documentId: roomId,
+      idToken: idToken,
+      data: updated,
+    );
+
+    return _decorateRoomForActor(room: updated, actor: actor);
+  }
+
   Future<Map<String, dynamic>?> _findLatestQuoteMessage({
     required String idToken,
     required String chatRoomId,
@@ -1131,6 +1234,44 @@ class ChatService {
       if (msg['isQuoteRequest'] == true) return msg;
     }
     return null;
+  }
+
+  Future<_ChatSummary?> _findLatestChatSummary({
+    required String idToken,
+    required String chatRoomId,
+    required String actorUid,
+  }) async {
+    final messages = await _firestoreClient.listDocuments(
+      collectionPath: 'chatRooms/$chatRoomId/messages',
+      idToken: idToken,
+      pageSize: 300,
+      orderBy: 'timestamp desc',
+    );
+
+    String? preview;
+    String? timestamp;
+    var unreadCount = 0;
+    for (final msg in messages) {
+      if (msg['isQuoteRequest'] == true) continue;
+      if (_readStringList(msg['deletedFor']).contains(actorUid)) continue;
+      if (preview == null) {
+        preview = _messagePreview(msg);
+        timestamp = '${msg['timestamp'] ?? ''}'.trim();
+      }
+      final senderId = '${msg['senderId'] ?? ''}'.trim();
+      if (senderId.isNotEmpty &&
+          senderId != actorUid &&
+          msg['isRead'] != true) {
+        unreadCount++;
+      }
+    }
+
+    if (preview == null || preview.isEmpty) return null;
+    return _ChatSummary(
+      preview: preview,
+      timestamp: timestamp == null || timestamp.isEmpty ? _nowIso() : timestamp,
+      unreadCount: unreadCount,
+    );
   }
 
   Future<void> _syncActiveProject({
@@ -1230,6 +1371,121 @@ class ChatService {
 
   bool _participantsContain(Map<String, dynamic> room, String uid) {
     return _readStringList(room['participants']).contains(uid);
+  }
+
+  Map<String, dynamic> _decorateRoomForActor({
+    required Map<String, dynamic> room,
+    required _ActorContext actor,
+  }) {
+    final actorIsVendorInRoom = '${room['vendorId'] ?? ''}'.trim() == actor.uid;
+    final actorIsCustomerInRoom =
+        '${room['customerId'] ?? ''}'.trim() == actor.uid;
+    final viewingAsVendor =
+        actorIsVendorInRoom || (!actorIsCustomerInRoom && actor.isVendor);
+
+    final currentUserName = viewingAsVendor
+        ? '${room['vendorName'] ?? ''}'.trim()
+        : '${room['customerName'] ?? ''}'.trim();
+    final currentUserImage = viewingAsVendor
+        ? '${room['vendorImage'] ?? ''}'.trim()
+        : '${room['customerImage'] ?? ''}'.trim();
+    final otherUserId = viewingAsVendor
+        ? '${room['customerId'] ?? ''}'.trim()
+        : '${room['vendorId'] ?? ''}'.trim();
+    final otherUserName = viewingAsVendor
+        ? '${room['customerName'] ?? ''}'.trim()
+        : '${room['vendorName'] ?? ''}'.trim();
+    final otherUserImage = viewingAsVendor
+        ? '${room['customerImage'] ?? ''}'.trim()
+        : '${room['vendorImage'] ?? ''}'.trim();
+    final lastChatMessage = _optionalString(room, 'lastChatMessage');
+    final fallbackCurrentName = _displayName(actor.profile, actor.isVendor);
+    final fallbackCurrentImage = _profileImage(actor.profile);
+    final fallbackOtherName = viewingAsVendor ? 'Customer' : 'Vendor';
+    final fallbackOtherImage = _profileImage(const <String, dynamic>{});
+
+    return <String, dynamic>{
+      ...room,
+      if (lastChatMessage != null) 'lastMessage': lastChatMessage,
+      if (room['lastChatMessageTimestamp'] != null)
+        'lastMessageTimestamp': room['lastChatMessageTimestamp'],
+      'currentUserId': actor.uid,
+      'currentUserName':
+          currentUserName.isNotEmpty ? currentUserName : fallbackCurrentName,
+      'currentUserImage':
+          currentUserImage.isNotEmpty ? currentUserImage : fallbackCurrentImage,
+      'otherUserId': otherUserId,
+      'otherUserName':
+          otherUserName.isNotEmpty ? otherUserName : fallbackOtherName,
+      'otherUserImage':
+          otherUserImage.isNotEmpty ? otherUserImage : fallbackOtherImage,
+      'peerId': otherUserId,
+      'peerName': otherUserName.isNotEmpty ? otherUserName : fallbackOtherName,
+      'peerImage':
+          otherUserImage.isNotEmpty ? otherUserImage : fallbackOtherImage,
+    };
+  }
+
+  Map<String, dynamic> _decorateMessageForActor({
+    required Map<String, dynamic> message,
+    required Map<String, dynamic> room,
+    required _ActorContext actor,
+  }) {
+    final senderId = '${message['senderId'] ?? ''}'.trim();
+    final receiverId = '${message['receiverId'] ?? ''}'.trim();
+    final vendorId = '${room['vendorId'] ?? ''}'.trim();
+    final customerId = '${room['customerId'] ?? ''}'.trim();
+
+    final senderIsVendor = senderId.isNotEmpty && senderId == vendorId;
+    final receiverIsVendor = receiverId.isNotEmpty && receiverId == vendorId;
+    final senderName = senderIsVendor
+        ? '${room['vendorName'] ?? ''}'.trim()
+        : senderId == customerId
+            ? '${room['customerName'] ?? ''}'.trim()
+            : '';
+    final receiverName = receiverIsVendor
+        ? '${room['vendorName'] ?? ''}'.trim()
+        : receiverId == customerId
+            ? '${room['customerName'] ?? ''}'.trim()
+            : '';
+    final senderImage = senderIsVendor
+        ? '${room['vendorImage'] ?? ''}'.trim()
+        : senderId == customerId
+            ? '${room['customerImage'] ?? ''}'.trim()
+            : '';
+    final receiverImage = receiverIsVendor
+        ? '${room['vendorImage'] ?? ''}'.trim()
+        : receiverId == customerId
+            ? '${room['customerImage'] ?? ''}'.trim()
+            : '';
+    final fallbackSenderName = senderId == actor.uid
+        ? _displayName(actor.profile, actor.isVendor)
+        : senderIsVendor
+            ? 'Vendor'
+            : 'Customer';
+    final fallbackReceiverName = receiverId == actor.uid
+        ? _displayName(actor.profile, actor.isVendor)
+        : receiverIsVendor
+            ? 'Vendor'
+            : 'Customer';
+    final fallbackSenderImage =
+        senderId == actor.uid ? _profileImage(actor.profile) : _profileImage({});
+    final fallbackReceiverImage = receiverId == actor.uid
+        ? _profileImage(actor.profile)
+        : _profileImage({});
+
+    return <String, dynamic>{
+      ...message,
+      'isMine': senderId == actor.uid,
+      'senderName': senderName.isNotEmpty ? senderName : fallbackSenderName,
+      'senderImage': senderImage.isNotEmpty ? senderImage : fallbackSenderImage,
+      'senderRole': senderIsVendor ? 'vendor' : 'customer',
+      'receiverName':
+          receiverName.isNotEmpty ? receiverName : fallbackReceiverName,
+      'receiverImage':
+          receiverImage.isNotEmpty ? receiverImage : fallbackReceiverImage,
+      'receiverRole': receiverIsVendor ? 'vendor' : 'customer',
+    };
   }
 
   void _ensureParticipant({
@@ -1400,4 +1656,16 @@ class _ActorContext {
   final Map<String, dynamic> profile;
 
   bool get isVendor => role == 'vendor' || role == 'artisan';
+}
+
+class _ChatSummary {
+  const _ChatSummary({
+    required this.preview,
+    required this.timestamp,
+    required this.unreadCount,
+  });
+
+  final String preview;
+  final String timestamp;
+  final int unreadCount;
 }
