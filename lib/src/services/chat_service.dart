@@ -4,6 +4,7 @@ import 'package:workpalbackend/src/config/env.dart';
 import 'package:workpalbackend/src/exceptions/api_exception.dart';
 import 'package:workpalbackend/src/firebase/firebase_auth_rest_client.dart';
 import 'package:workpalbackend/src/firebase/firestore_rest_client.dart';
+import 'package:workpalbackend/src/services/customer_profile_activity_service.dart';
 
 final chatService = ChatService();
 
@@ -616,6 +617,7 @@ class ChatService {
       );
       await _syncJobPostStatus(
         idToken: idToken,
+        chatRoomId: chatRoomId.trim(),
         quoteMessage: msg,
         status: 'accepted',
         vendorId: '${updatedRoom['vendorId'] ?? ''}',
@@ -692,6 +694,7 @@ class ChatService {
       );
       await _syncJobPostStatus(
         idToken: idToken,
+        chatRoomId: chatRoomId.trim(),
         quoteMessage: latestQuote,
         status: officialStatus,
         vendorId: '${updated['vendorId'] ?? ''}',
@@ -1317,6 +1320,7 @@ class ChatService {
 
   Future<void> _syncJobPostStatus({
     required String idToken,
+    required String chatRoomId,
     required Map<String, dynamic>? quoteMessage,
     required String status,
     required String vendorId,
@@ -1330,6 +1334,13 @@ class ChatService {
       idToken: idToken,
     );
     if (job == null) return;
+    final room = chatRoomId.trim().isEmpty
+        ? null
+        : await _firestoreClient.getDocument(
+            collectionPath: 'chatRooms',
+            documentId: chatRoomId.trim(),
+            idToken: idToken,
+          );
     await _firestoreClient.setDocument(
       collectionPath: 'job_posts',
       documentId: jobId,
@@ -1338,9 +1349,20 @@ class ChatService {
         ...job,
         'status': _jobStatus(status),
         if (vendorId.trim().isNotEmpty) 'assignedVendorId': vendorId.trim(),
+        if ('${room?['vendorName'] ?? ''}'.trim().isNotEmpty)
+          'assignedVendorName': '${room?['vendorName'] ?? ''}'.trim(),
+        if ('${room?['vendorImage'] ?? ''}'.trim().isNotEmpty)
+          'assignedVendorImage': '${room?['vendorImage'] ?? ''}'.trim(),
         'updatedAt': _nowIso(),
       },
     );
+    final customerId = '${job['customerId'] ?? ''}'.trim();
+    if (customerId.isNotEmpty) {
+      await customerProfileActivityService.syncCustomerActivity(
+        idToken: idToken,
+        customerId: customerId,
+      );
+    }
   }
 
   Future<List<Map<String, dynamic>>> _listAllRoomsForUser({

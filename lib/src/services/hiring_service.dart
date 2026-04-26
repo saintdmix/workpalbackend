@@ -5,6 +5,7 @@ import 'package:workpalbackend/src/exceptions/api_exception.dart';
 import 'package:workpalbackend/src/firebase/firebase_auth_rest_client.dart';
 import 'package:workpalbackend/src/firebase/firestore_rest_client.dart';
 import 'package:workpalbackend/src/services/chat_service.dart';
+import 'package:workpalbackend/src/services/customer_profile_activity_service.dart';
 
 final hiringService = HiringService();
 
@@ -219,6 +220,12 @@ class HiringService {
       },
     );
 
+    await customerProfileActivityService.syncCustomerActivity(
+      idToken: idToken,
+      customerId: uid,
+      seedProfile: profile,
+    );
+
     return <String, dynamic>{'id': jobId, ...data};
   }
 
@@ -296,6 +303,12 @@ class HiringService {
       data: merged,
     );
 
+    await customerProfileActivityService.syncCustomerActivity(
+      idToken: idToken,
+      customerId: actor.uid,
+      seedProfile: actor.profile,
+    );
+
     return <String, dynamic>{'id': jobId.trim(), ...merged};
   }
 
@@ -314,6 +327,12 @@ class HiringService {
       collectionPath: 'job_posts',
       documentId: jobId.trim(),
       idToken: idToken,
+    );
+
+    await customerProfileActivityService.syncCustomerActivity(
+      idToken: idToken,
+      customerId: actor.uid,
+      seedProfile: actor.profile,
     );
 
     return <String, dynamic>{'deleted': true, 'jobId': jobId.trim()};
@@ -583,6 +602,12 @@ class HiringService {
         );
         if (job != null) {
           final artisanId = '${updated['senderId'] ?? ''}'.trim();
+          final artisanProfile = artisanId.isEmpty
+              ? null
+              : await _resolveVendorProfile(
+                  idToken: idToken,
+                  vendorId: artisanId,
+                );
           await _firestoreClient.setDocument(
             collectionPath: 'job_posts',
             documentId: jobId,
@@ -591,10 +616,21 @@ class HiringService {
               ...job,
               'status': 'progress',
               'assignedVendorId': artisanId,
+              if (artisanProfile != null)
+                'assignedVendorName': _vendorName(artisanProfile),
+              if (artisanProfile != null)
+                'assignedVendorImage': _profileImage(artisanProfile),
               'applicants': artisanId.isNotEmpty ? <String>[artisanId] : <String>[],
               'updatedAt': _nowIso(),
             },
           );
+          final customerId = '${job['customerId'] ?? ''}'.trim();
+          if (customerId.isNotEmpty) {
+            await customerProfileActivityService.syncCustomerActivity(
+              idToken: idToken,
+              customerId: customerId,
+            );
+          }
         }
       }
     }
@@ -645,6 +681,24 @@ class HiringService {
     );
     if (doc == null) throw ApiException.notFound('Job post not found.');
     return <String, dynamic>{'id': normalized, ...doc};
+  }
+
+  Future<Map<String, dynamic>?> _resolveVendorProfile({
+    required String idToken,
+    required String vendorId,
+  }) async {
+    final normalizedVendorId = vendorId.trim();
+    if (normalizedVendorId.isEmpty) return null;
+    return await _firestoreClient.getDocument(
+          collectionPath: 'vendors',
+          documentId: normalizedVendorId,
+          idToken: idToken,
+        ) ??
+        await _firestoreClient.getDocument(
+          collectionPath: 'artisans',
+          documentId: normalizedVendorId,
+          idToken: idToken,
+        );
   }
 
   Future<List<Map<String, dynamic>>> _quotesForRoom({
@@ -898,6 +952,12 @@ class HiringService {
     return _optionalString(profile, 'username') ??
         _optionalString(profile, 'name') ??
         'Customer';
+  }
+
+  String _vendorName(Map<String, dynamic> profile) {
+    return _optionalString(profile, 'username') ??
+        _optionalString(profile, 'name') ??
+        'Artisan';
   }
 
   String _profileImage(Map<String, dynamic> profile) {

@@ -2,6 +2,7 @@ import 'package:workpalbackend/src/config/env.dart';
 import 'package:workpalbackend/src/exceptions/api_exception.dart';
 import 'package:workpalbackend/src/firebase/firebase_auth_rest_client.dart';
 import 'package:workpalbackend/src/firebase/firestore_rest_client.dart';
+import 'package:workpalbackend/src/services/customer_profile_activity_service.dart';
 
 final profileService = ProfileService();
 
@@ -137,6 +138,15 @@ class ProfileService {
           ) ??
           0,
     };
+
+    if (normalizedRole == 'customer') {
+      merged.addAll(
+        await customerProfileActivityService.buildCustomerActivity(
+          idToken: idToken,
+          customerId: uid,
+        ),
+      );
+    }
 
     final presenceSource = _pickLatestPresence(<Map<String, dynamic>?>[
       // Prefer role profile first when timestamps tie.
@@ -280,7 +290,18 @@ class ProfileService {
   }
 
   Map<String, dynamic> _sanitizeUpdates(Map<String, dynamic> updates) {
-    const blocked = <String>{'uid', 'email', 'role', 'createdAt', 'updatedAt'};
+    const blocked = <String>{
+      'uid',
+      'email',
+      'role',
+      'createdAt',
+      'updatedAt',
+      'jobPosts',
+      'jobs',
+      'jobsPostedCount',
+      'hireHistory',
+      'hiresCount',
+    };
     final sanitized = <String, dynamic>{};
 
     for (final entry in updates.entries) {
