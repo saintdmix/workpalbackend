@@ -291,6 +291,70 @@ Map<String, dynamic> buildOpenApiSpec({
           },
         ),
       },
+      '/profile/location': <String, dynamic>{
+        'put': _operation(
+          summary: 'Update profile location',
+          tag: 'Profile',
+          parameters: <Map<String, dynamic>>[
+            _queryParam(
+              name: 'role',
+              description: 'User role (`customer` or `artisan`).',
+              required: true,
+            ),
+          ],
+          requestBodyDescription:
+              'Update the signed-in user latitude/longitude location.',
+          requestBodySchema: _objectSchema(
+            properties: <String, dynamic>{
+              'latitude': <String, dynamic>{'type': 'number'},
+              'longitude': <String, dynamic>{'type': 'number'},
+              'lat': <String, dynamic>{'type': 'number'},
+              'lng': <String, dynamic>{'type': 'number'},
+              'address': _stringSchema(),
+              'locationAddress': _stringSchema(),
+            },
+            required: const <String>['latitude', 'longitude'],
+            additionalProperties: true,
+          ),
+          requestBodyExample: <String, dynamic>{
+            'latitude': 6.5244,
+            'longitude': 3.3792,
+            'address': 'Lekki, Lagos',
+            'locationAddress': 'Lekki Phase 1, Lagos',
+          },
+        ),
+        'patch': _operation(
+          summary: 'Update profile location',
+          tag: 'Profile',
+          parameters: <Map<String, dynamic>>[
+            _queryParam(
+              name: 'role',
+              description: 'User role (`customer` or `artisan`).',
+              required: true,
+            ),
+          ],
+          requestBodyDescription:
+              'Update the signed-in user latitude/longitude location.',
+          requestBodySchema: _objectSchema(
+            properties: <String, dynamic>{
+              'latitude': <String, dynamic>{'type': 'number'},
+              'longitude': <String, dynamic>{'type': 'number'},
+              'lat': <String, dynamic>{'type': 'number'},
+              'lng': <String, dynamic>{'type': 'number'},
+              'address': _stringSchema(),
+              'locationAddress': _stringSchema(),
+            },
+            required: const <String>['latitude', 'longitude'],
+            additionalProperties: true,
+          ),
+          requestBodyExample: <String, dynamic>{
+            'latitude': 6.5244,
+            'longitude': 3.3792,
+            'address': 'Lekki, Lagos',
+            'locationAddress': 'Lekki Phase 1, Lagos',
+          },
+        ),
+      },
       '/stories': <String, dynamic>{
         'get': _operation(
           summary: 'List stories',
@@ -456,6 +520,52 @@ Map<String, dynamic> buildOpenApiSpec({
           },
           successCode: 201,
           successDescription: 'Notification created.',
+        ),
+      },
+      '/notifications/{user_id}': <String, dynamic>{
+        'post': _operation(
+          summary: 'Create notification for another user',
+          tag: 'Notifications',
+          parameters: <Map<String, dynamic>>[
+            _pathParam(name: 'user_id'),
+            _queryParam(
+              name: 'role',
+              description:
+                  'Recipient role (`customer` or `artisan`) for the notification store.',
+              required: true,
+            ),
+          ],
+          requestBodyDescription:
+              'Notification payload to send to the user id in the path.',
+          requestBodySchema: _objectSchema(
+            properties: <String, dynamic>{
+              'title': _stringSchema(),
+              'body': _stringSchema(),
+              'type': <String, dynamic>{
+                'type': 'string',
+                'enum': notificationTypeValues,
+                'description':
+                    'Notification type. Allowed values: '
+                    '${notificationTypeValues.join(', ')}.',
+              },
+              'data': <String, dynamic>{
+                'type': 'object',
+                'additionalProperties': true,
+              },
+            },
+            required: const <String>['title', 'body'],
+            additionalProperties: true,
+          ),
+          requestBodyExample: <String, dynamic>{
+            'title': 'New message',
+            'body': 'You have a new message from another user.',
+            'type': notificationTypeChatMessage,
+            'data': <String, dynamic>{
+              'chatRoomId': 'room_001',
+            },
+          },
+          successCode: 201,
+          successDescription: 'Notification created for the target user.',
         ),
       },
       '/notifications/read_all': <String, dynamic>{

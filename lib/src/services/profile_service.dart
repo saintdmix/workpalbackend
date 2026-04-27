@@ -95,10 +95,11 @@ class ProfileService {
     final appToken = _optionalStringFromAny(appTokenDoc, 'appToken');
 
     final now = DateTime.now().toUtc().toIso8601String();
-    final merged = <String, dynamic>{
-      if (legacyProfile != null) ...legacyProfile,
-      if (roleProfile != null) ...roleProfile,
-      if (vendorProfile != null) ...vendorProfile,
+    var merged = <String, dynamic>{};
+    merged = _mergeProfileData(merged, legacyProfile);
+    merged = _mergeProfileData(merged, roleProfile);
+    merged = _mergeProfileData(merged, vendorProfile);
+    merged.addAll(<String, dynamic>{
       'uid': uid,
       'email': email,
       'role': normalizedRole,
@@ -137,7 +138,7 @@ class ProfileService {
             (vendorProfile ?? roleProfile ?? legacyProfile)?['reviewCount'],
           ) ??
           0,
-    };
+    });
 
     if (normalizedRole == 'customer') {
       merged.addAll(
@@ -160,8 +161,32 @@ class ProfileService {
     if (presenceSource != null) {
       merged['isOnline'] = presenceSource['isOnline'] == true;
       final lastSeen = _optionalStringFromAny(presenceSource, 'lastSeen');
-      if (lastSeen != null && lastSeen.isNotEmpty)
+      if (lastSeen != null && lastSeen.isNotEmpty) {
         merged['lastSeen'] = lastSeen;
+        merged['lastTimeOnline'] = lastSeen;
+      }
+    }
+
+    final bestName =
+        _optionalStringFromAny(merged, 'name') ??
+        _optionalStringFromAny(merged, 'username') ??
+        _optionalStringFromAny(merged, 'displayName');
+    if (bestName != null && bestName.isNotEmpty) {
+      merged['name'] = bestName;
+    }
+
+    final bestProfileImage =
+        _optionalStringFromAny(merged, 'profileImage') ??
+        _optionalStringFromAny(merged, 'profileImageUrl') ??
+        _optionalStringFromAny(merged, 'imageUrl') ??
+        _optionalStringFromAny(merged, 'avatar') ??
+        _optionalStringFromAny(merged, 'photoUrl') ??
+        _optionalStringFromAny(merged, 'photoURL');
+    if (bestProfileImage != null && bestProfileImage.isNotEmpty) {
+      merged['profileImage'] = bestProfileImage;
+      if ((_optionalStringFromAny(merged, 'imageUrl') ?? '').isEmpty) {
+        merged['imageUrl'] = bestProfileImage;
+      }
     }
 
     if (appToken != null && appToken.isNotEmpty) {
@@ -342,5 +367,30 @@ class ProfileService {
     final value = payload[key];
     if (value is String && value.trim().isNotEmpty) return value.trim();
     return null;
+  }
+
+  Map<String, dynamic> _mergeProfileData(
+    Map<String, dynamic> current,
+    Map<String, dynamic>? incoming,
+  ) {
+    if (incoming == null || incoming.isEmpty) return current;
+    final merged = <String, dynamic>{...current};
+    for (final entry in incoming.entries) {
+      final next = entry.value;
+      if (next == null) continue;
+      if (next is String) {
+        if (next.trim().isEmpty) continue;
+        merged[entry.key] = next.trim();
+        continue;
+      }
+      if (next is List && next.isEmpty && merged.containsKey(entry.key)) {
+        continue;
+      }
+      if (next is Map && next.isEmpty && merged.containsKey(entry.key)) {
+        continue;
+      }
+      merged[entry.key] = next;
+    }
+    return merged;
   }
 }

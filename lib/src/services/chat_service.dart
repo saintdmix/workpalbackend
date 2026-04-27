@@ -878,21 +878,43 @@ class ChatService {
     final actor = await _resolveActor(idToken: idToken, roleHint: role);
     final profile = await _ensureActorProfile(actor: actor, idToken: idToken);
     final now = _nowIso();
-    await _firestoreClient.setDocument(
+    await _writePresence(
       collectionPath: actor.collection,
       documentId: actor.uid,
       idToken: idToken,
-      data: <String, dynamic>{
-        ...profile,
-        'isOnline': isOnline,
-        'lastSeen': now
-      },
+      base: profile,
+      isOnline: isOnline,
+      now: now,
     );
+    for (final collection in const <String>[
+      'users',
+      'userId',
+      'customers',
+      'vendors',
+      'artisans',
+    ]) {
+      if (collection == actor.collection) continue;
+      final existing = await _firestoreClient.getDocument(
+        collectionPath: collection,
+        documentId: actor.uid,
+        idToken: idToken,
+      );
+      if (existing == null) continue;
+      await _writePresence(
+        collectionPath: collection,
+        documentId: actor.uid,
+        idToken: idToken,
+        base: existing,
+        isOnline: isOnline,
+        now: now,
+      );
+    }
     return <String, dynamic>{
       'uid': actor.uid,
       'role': actor.role,
       'isOnline': isOnline,
       'lastSeen': now,
+      'lastTimeOnline': now,
     };
   }
 
@@ -1062,6 +1084,28 @@ class ChatService {
       data: profile,
     );
     return profile;
+  }
+
+  Future<void> _writePresence({
+    required String collectionPath,
+    required String documentId,
+    required String idToken,
+    required Map<String, dynamic> base,
+    required bool isOnline,
+    required String now,
+  }) {
+    return _firestoreClient.setDocument(
+      collectionPath: collectionPath,
+      documentId: documentId,
+      idToken: idToken,
+      data: <String, dynamic>{
+        ...base,
+        'isOnline': isOnline,
+        'lastSeen': now,
+        'lastTimeOnline': now,
+        'updatedAt': now,
+      },
+    );
   }
 
   Future<Map<String, dynamic>> _resolveOtherProfile({

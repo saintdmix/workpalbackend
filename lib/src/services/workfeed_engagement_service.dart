@@ -184,21 +184,10 @@ class WorkfeedEngagementService {
 
     final profileMap = <String, Map<String, dynamic>>{};
     for (final uid in uniqueIds) {
-      for (final collection in const <String>[
-        'artisans',
-        'vendors',
-        'customers',
-      ]) {
-        final doc = await _firestoreClient.getDocument(
-          collectionPath: collection,
-          documentId: uid,
-          idToken: idToken,
-        );
-        if (doc != null) {
-          profileMap[uid] = doc;
-          break;
-        }
-      }
+      profileMap[uid] = await _loadMergedProfile(
+        uid: uid,
+        idToken: idToken,
+      );
     }
 
     return comments.map((comment) {
@@ -206,16 +195,14 @@ class WorkfeedEngagementService {
       final profile = profileMap[uid] ?? const <String, dynamic>{};
       return <String, dynamic>{
         ...comment,
-        'commenterName': comment['commenterName'] ??
-            profile['name'] ??
-            profile['username'] ??
-            profile['displayName'] ??
-            '',
-        'commenterImage': comment['commenterImage'] ??
-            profile['profileImageUrl'] ??
-            profile['imageUrl'] ??
-            profile['profileImage'] ??
-            '',
+        'commenterName': _commenterName(
+          profile: profile,
+          fallback: _optionalString(comment, 'commenterName'),
+        ),
+        'commenterImage': _commenterImage(
+          profile: profile,
+          fallback: _optionalString(comment, 'commenterImage'),
+        ),
       };
     }).toList();
   }
@@ -235,27 +222,14 @@ class WorkfeedEngagementService {
     final parentCommentId = _optionalString(payload, 'parentCommentId');
     final now = DateTime.now().toUtc().toIso8601String();
 
-    // Fetch commenter profile to embed name and image.
-    Map<String, dynamic> commenterProfile = const <String, dynamic>{};
-    for (final collection in const <String>['artisans', 'vendors', 'customers']) {
-      final doc = await _firestoreClient.getDocument(
-        collectionPath: collection,
-        documentId: uid,
-        idToken: idToken,
-      );
-      if (doc != null) {
-        commenterProfile = doc;
-        break;
-      }
-    }
-    final commenterName = _optionalString(commenterProfile, 'name') ??
-        _optionalString(commenterProfile, 'username') ??
-        _optionalString(commenterProfile, 'displayName') ??
-        '';
-    final commenterImage = _optionalString(commenterProfile, 'profileImageUrl') ??
-        _optionalString(commenterProfile, 'imageUrl') ??
-        _optionalString(commenterProfile, 'profileImage') ??
-        '';
+    // Merge known profile documents so role-specific docs can override `users`
+    // while still inheriting missing fields like profile images.
+    final commenterProfile = await _loadMergedProfile(
+      uid: uid,
+      idToken: idToken,
+    );
+    final commenterName = _commenterName(profile: commenterProfile);
+    final commenterImage = _commenterImage(profile: commenterProfile);
 
     final created = await _firestoreClient.createDocument(
       collectionPath: 'posts/$normalizedPostId/comments',
@@ -636,6 +610,88 @@ class WorkfeedEngagementService {
       return value.trim();
     }
     return null;
+  }
+
+  String _commenterName({
+    required Map<String, dynamic> profile,
+    String? fallback,
+  }) {
+    return _optionalString(profile, 'name') ??
+        _optionalString(profile, 'username') ??
+        _optionalString(profile, 'displayName') ??
+        (fallback ?? '');
+  }
+
+  String _commenterImage({
+    required Map<String, dynamic> profile,
+    String? fallback,
+  }) {
+    return _optionalString(profile, 'profileImage') ??
+        _optionalString(profile, 'profileImageUrl') ??
+        _optionalString(profile, 'imageUrl') ??
+        _optionalString(profile, 'avatar') ??
+        _optionalString(profile, 'photoUrl') ??
+        _optionalString(profile, 'photoURL') ??
+        (fallback ?? '');
+  }
+
+  Future<Map<String, dynamic>> _loadMergedProfile({
+    required String uid,
+    required String idToken,
+  }) async {
+    if (uid.trim().isEmpty) return const <String, dynamic>{};
+
+    var merged = <String, dynamic>{};
+    final users = await _firestoreClient.getDocument(
+      collectionPath: 'users',
+      documentId: uid,
+      idToken: idToken,
+    );
+    merged = _mergeProfileData(merged, users);
+    final customer = await _firestoreClient.getDocument(
+      collectionPath: 'customers',
+      documentId: uid,
+      idToken: idToken,
+    );
+    final vendor = await _firestoreClient.getDocument(
+      collectionPath: 'vendors',
+      documentId: uid,
+      idToken: idToken,
+    );
+    final artisan = await _firestoreClient.getDocument(
+      collectionPath: 'artisans',
+      documentId: uid,
+      idToken: idToken,
+    );
+    merged = _mergeProfileData(merged, artisan);
+    merged = _mergeProfileData(merged, vendor);
+    merged = _mergeProfileData(merged, customer);
+    return merged;
+  }
+
+  Map<String, dynamic> _mergeProfileData(
+    Map<String, dynamic> current,
+    Map<String, dynamic>? incoming,
+  ) {
+    if (incoming == null || incoming.isEmpty) return current;
+    final merged = <String, dynamic>{...current};
+    for (final entry in incoming.entries) {
+      final next = entry.value;
+      if (next == null) continue;
+      if (next is String) {
+        if (next.trim().isEmpty) continue;
+        merged[entry.key] = next.trim();
+        continue;
+      }
+      if (next is List && next.isEmpty && merged.containsKey(entry.key)) {
+        continue;
+      }
+      if (next is Map && next.isEmpty && merged.containsKey(entry.key)) {
+        continue;
+      }
+      merged[entry.key] = next;
+    }
+    return merged;
   }
 }
 

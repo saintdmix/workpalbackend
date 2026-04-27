@@ -78,6 +78,7 @@ Future<Response> onRequest(RequestContext context) async {
       role: role!,
       idToken: idToken,
       payload: body,
+      targetUserId: targetUserId,
     );
     return Response.json(statusCode: HttpStatus.created, body: created);
   } on ApiException catch (e) {

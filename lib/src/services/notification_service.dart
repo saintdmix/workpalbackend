@@ -130,16 +130,23 @@ class NotificationService {
     required String role,
     required String idToken,
     required Map<String, dynamic> payload,
+    String? targetUserId,
   }) async {
     final context = await _resolveUserContext(role, idToken);
     final title = _requiredString(payload, 'title');
     final body = _requiredString(payload, 'body');
     final type = _normalizeNotificationType(payload);
     final now = DateTime.now().toUtc().toIso8601String();
+    final targetUid =
+        (targetUserId ?? _optionalString(payload, 'userId') ?? context.uid)
+            .trim();
+    if (targetUid.isEmpty) {
+      throw ApiException.badRequest('target user id is required.');
+    }
 
     final store = await _getStoreDoc(
       role: context.role,
-      uid: context.uid,
+      uid: targetUid,
       idToken: idToken,
       createIfMissing: true,
     );
@@ -158,17 +165,19 @@ class NotificationService {
       'data': payload['data'] is Map ? payload['data'] : <String, dynamic>{},
       'read': false,
       'createdAt': now,
+      'senderId': context.uid,
+      'userId': targetUid,
     };
     items.insert(0, item);
 
     await _saveStoreDoc(
       role: context.role,
-      uid: context.uid,
+      uid: targetUid,
       idToken: idToken,
       items: items,
       updatedAt: now,
     );
-    return _decorateNotification(item);
+    return <String, dynamic>{'targetUserId': targetUid, ..._decorateNotification(item)};
   }
 
   Future<Map<String, dynamic>> markAsRead({
